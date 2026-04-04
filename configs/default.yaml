@@ -1,0 +1,40 @@
+# Default generation parameters for ACE-Step 1.5
+
+generation:
+  audio_duration: 60.0          # seconds (max ~240)
+  infer_step: 60                # diffusion steps (27=fast, 60=standard)
+  guidance_scale: 15.0          # CFG strength (3-20)
+  scheduler_type: "euler"       # euler | heun | pingpong
+  cfg_type: "apg"               # apg | cfg | cfg_star | double_condition
+  omega_scale: 10.0
+  batch_size: 1
+
+  guidance_interval: 0.5
+  guidance_interval_decay: 0.0
+  min_guidance_scale: 3.0
+  guidance_scale_text: 0.0
+  guidance_scale_lyric: 0.0
+
+  use_erg_tag: true
+  use_erg_lyric: true
+  use_erg_diffusion: true
+
+model:
+  checkpoint_dir: null          # null = ~/.cache/ace-step/checkpoints
+  device_id: 0
+  dtype: "bfloat16"
+  torch_compile: false
+  cpu_offload: false
+  overlapped_decode: false
+
+post_processing:
+  output_format: "wav"          # wav | mp3 | flac
+  sample_rate: 48000
+  normalize_loudness: true
+  target_lufs: -14.0            # EBU R128 standard
+  trim_silence: true
+  silence_threshold_db: -60
+
+output:
+  save_dir: "./output"
+  include_metadata: true

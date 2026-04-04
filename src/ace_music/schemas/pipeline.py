@@ -1,0 +1,47 @@
+"""Pipeline input/output models for the full generation flow."""
+
+from pydantic import BaseModel, Field
+
+
+class PipelineInput(BaseModel):
+    """Top-level input to the MusicAgent pipeline."""
+
+    description: str = Field(
+        description="Natural language description of the desired music"
+    )
+    lyrics: str | None = Field(
+        default=None, description="Pre-written lyrics (raw text)"
+    )
+    style_tags: list[str] = Field(
+        default_factory=list, description="Pre-known style tags"
+    )
+    duration_seconds: float = Field(
+        default=60.0, ge=5.0, le=240.0, description="Target audio duration"
+    )
+    language: str = Field(default="en")
+    is_instrumental: bool = False
+    seed: int | None = Field(default=None, description="Reproducibility seed")
+    output_format: str = Field(default="wav")
+    output_dir: str = Field(default="./output")
+
+    # Style overrides
+    tempo_preference: str | None = None
+    mood: str | None = None
+    guidance_scale: float | None = None
+    infer_step: int | None = None
+
+
+class PipelineOutput(BaseModel):
+    """Top-level output from the MusicAgent pipeline."""
+
+    audio_path: str = Field(description="Path to the final audio file")
+    duration_seconds: float
+    format: str
+    sample_rate: int = 48000
+    metadata: dict = Field(
+        default_factory=dict,
+        description="Generation metadata (seed, params, style, lyrics)",
+    )
+    segments: list[dict] = Field(
+        default_factory=list, description="Lyrics segment info"
+    )

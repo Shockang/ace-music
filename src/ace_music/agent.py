@@ -1,0 +1,178 @@
+"""MusicAgent: Planning-mode orchestrator for the music generation pipeline.
+
+Orchestrates the five-stage pipeline:
+1. LyricsPlanner  — parse/structure lyrics
+2. StylePlanner   — map style to ACE-Step params
+3. Generator      — call ACE-Step model
+4. PostProcessor  — normalize and convert
+5. OutputWorker   — write final files + metadata
+
+Design follows the Planning pattern: the agent prepares a plan (which tools
+to run in what order), then executes sequentially, passing outputs forward.
+"""
+
+import logging
+import random
+
+from ace_music.schemas.pipeline import PipelineInput, PipelineOutput
+from ace_music.tools.generator import ACEStepGenerator, GeneratorConfig, GenerationInput
+from ace_music.tools.lyrics_planner import LyricsPlanner
+from ace_music.tools.output import OutputInput, OutputWorker
+from ace_music.tools.post_processor import PostProcessInput, PostProcessor
+from ace_music.tools.style_planner import StylePlanner
+
+logger = logging.getLogger(__name__)
+
+
+class MusicAgent:
+    """Planning-mode music generation agent.
+
+    Usage:
+        agent = MusicAgent()
+        result = await agent.run(PipelineInput(
+            description="A dreamy synthwave track about neon cities",
+            duration_seconds=60.0,
+        ))
+    """
+
+    def __init__(
+        self,
+        generator_config: GeneratorConfig | None = None,
+    ) -> None:
+        self._lyrics_planner = LyricsPlanner()
+        self._style_planner = StylePlanner()
+        self._generator = ACEStepGenerator(generator_config)
+        self._post_processor = PostProcessor()
+        self._output_worker = OutputWorker()
+
+    def _build_plan(self, input_data: PipelineInput) -> list[str]:
+        """Build execution plan from input. Returns list of tool names to execute."""
+        plan = []
+
+        # Step 1: Lyrics planning (skip if instrumental)
+        if not input_data.is_instrumental and (input_data.lyrics or input_data.description):
+            plan.append("lyrics_planner")
+
+        # Step 2: Style planning (always needed)
+        plan.append("style_planner")
+
+        # Step 3: Generation (always needed)
+        plan.append("generator")
+
+        # Step 4: Post-processing (always needed)
+        plan.append("post_processor")
+
+        # Step 5: Output (always needed)
+        plan.append("output")
+
+        return plan
+
+    async def run(self, input_data: PipelineInput) -> PipelineOutput:
+        """Execute the full music generation pipeline.
+
+        Args:
+            input_data: Pipeline input with description, style, duration, etc.
+
+        Returns:
+            PipelineOutput with final audio path and metadata.
+        """
+        plan = self._build_plan(input_data)
+        logger.info("Pipeline plan: %s", " -> ".join(plan))
+        seed = input_data.seed if input_data.seed is not None else random.randint(0, 2**32 - 1)
+
+        # Stage 1: Lyrics planning
+        lyrics_output = None
+        if "lyrics_planner" in plan:
+            from ace_music.schemas.lyrics import LyricsInput
+
+            lyrics_input = LyricsInput(
+                raw_text=input_data.lyrics or input_data.description,
+                language=input_data.language,
+                is_instrumental=input_data.is_instrumental,
+            )
+            lyrics_output = await self._lyrics_planner.execute(lyrics_input)
+            logger.info(
+                "Lyrics: %d segments, instrumental=%s",
+                len(lyrics_output.segments),
+                lyrics_output.is_instrumental,
+            )
+
+        # Stage 2: Style planning
+        from ace_music.schemas.style import StyleInput
+
+        style_input = StyleInput(
+            description=input_data.description,
+            reference_tags=input_data.style_tags,
+            tempo_preference=input_data.tempo_preference,
+            mood=input_data.mood,
+        )
+        style_output = await self._style_planner.execute(style_input)
+
+        # Apply user overrides
+        if input_data.guidance_scale is not None:
+            style_output = style_output.model_copy(
+                update={"guidance_scale": input_data.guidance_scale}
+            )
+        if input_data.infer_step is not None:
+            style_output = style_output.model_copy(update={"infer_step": input_data.infer_step})
+
+        logger.info("Style: prompt=%r, guidance=%.1f, steps=%d",
+                     style_output.prompt, style_output.guidance_scale, style_output.infer_step)
+
+        # Stage 3: Generation
+        from ace_music.schemas.lyrics import LyricsOutput
+
+        gen_input = GenerationInput(
+            lyrics=lyrics_output or LyricsOutput(
+                formatted_lyrics="",
+                is_instrumental=input_data.is_instrumental,
+            ),
+            style=style_output,
+            audio_duration=input_data.duration_seconds,
+            seed=seed,
+            output_dir=input_data.output_dir,
+            format=input_data.output_format,
+        )
+        audio_output = await self._generator.execute(gen_input)
+        logger.info("Generated: %s (%.1fs)", audio_output.file_path, audio_output.duration_seconds)
+
+        # Stage 4: Post-processing
+        pp_input = PostProcessInput(
+            audio=audio_output,
+            target_format=input_data.output_format,
+            output_dir=input_data.output_dir,
+        )
+        processed = await self._post_processor.execute(pp_input)
+        logger.info("Post-processed: %s", processed.file_path)
+
+        # Stage 5: Output
+        out_input = OutputInput(
+            audio=processed,
+            style=style_output,
+            seed=seed,
+            lyrics_text=lyrics_output.formatted_lyrics if lyrics_output else "",
+            description=input_data.description,
+            output_dir=input_data.output_dir,
+        )
+        result = await self._output_worker.execute(out_input)
+        logger.info("Output: %s", result.audio_path)
+
+        # Build pipeline output
+        segments_info = []
+        if lyrics_output and lyrics_output.segments:
+            for seg in lyrics_output.segments:
+                segments_info.append({
+                    "type": seg.segment_type.value,
+                    "lines": seg.lines,
+                    "time_start": seg.time_start,
+                    "time_end": seg.time_end,
+                })
+
+        return PipelineOutput(
+            audio_path=result.audio_path,
+            duration_seconds=result.duration_seconds,
+            format=result.format,
+            sample_rate=result.sample_rate,
+            metadata=result.metadata,
+            segments=segments_info,
+        )
