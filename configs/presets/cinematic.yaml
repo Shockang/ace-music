@@ -40,3 +40,13 @@ presets:
     tempo_range: [140, 180]
     genres: ["classical", "electronic"]
     mood: ["energetic", "aggressive"]
+
+  - id: dark_suspense
+    name: "暗黑悬疑"
+    description: "悬疑氛围音乐，紧张低频，电子合成器，适合金融惊悚场景"
+    prompt: "suspense, dark, tension, low frequency, electronic synthesizer, thriller, ominous"
+    guidance_scale: 15.0
+    omega_scale: 10.0
+    infer_step: 40
+    genres: ["electronic"]
+    mood: ["dark"]

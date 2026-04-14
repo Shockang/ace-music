@@ -112,3 +112,34 @@ class TestPresetMatch:
         match = PresetMatch(preset=preset, confidence=0.8, match_method="keyword")
         assert match.confidence == 0.8
         assert match.match_method == "keyword"
+
+
+class TestDarkSuspensePreset:
+    @pytest.mark.asyncio
+    async def test_dark_suspense_resolves_by_id(self):
+        """dark_suspense preset should be resolvable by exact ID."""
+        resolver = PresetResolver()
+        match = await resolver.resolve("dark_suspense")
+        assert match is not None
+        assert match.preset.id == "dark_suspense"
+        assert match.confidence == 1.0
+        assert match.match_method == "exact_id"
+
+    @pytest.mark.asyncio
+    async def test_dark_suspense_has_correct_params(self):
+        """dark_suspense should have 40 infer steps and electronic genre."""
+        resolver = PresetResolver()
+        match = await resolver.resolve("dark_suspense")
+        assert match is not None
+        preset = match.preset
+        assert preset.infer_step == 40
+        assert preset.guidance_scale == 15.0
+        assert "electronic" in preset.genres
+
+    @pytest.mark.asyncio
+    async def test_dark_suspense_fuzzy_match(self):
+        """Searching for suspense/dark keywords should find dark_suspense."""
+        resolver = PresetResolver()
+        match = await resolver.resolve("dark suspense thriller")
+        assert match is not None
+        assert match.preset.id == "dark_suspense"
