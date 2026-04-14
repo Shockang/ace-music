@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 import ace_music
 from ace_music.schemas.audio import ProcessedAudio
+from ace_music.schemas.output_config import OutputConfig
 from ace_music.schemas.style import StyleOutput
 from ace_music.tools.base import MusicTool
 
@@ -25,6 +26,7 @@ class OutputInput(BaseModel):
     lyrics_text: str = ""
     description: str = ""
     output_dir: str = "./output"
+    output_config: OutputConfig | None = None
 
 
 class OutputResult(BaseModel):
@@ -70,16 +72,42 @@ class OutputWorker(MusicTool[OutputInput, OutputResult]):
         text = re.sub(r"[\s_]+", "_", text)
         return text[:50].strip("_") or "untitled"
 
-    async def execute(self, input_data: OutputInput) -> OutputResult:
-        base_dir = Path(input_data.output_dir)
-        style_slug = self._slugify(input_data.style.prompt)
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        out_dir = base_dir / style_slug / timestamp
-        out_dir.mkdir(parents=True, exist_ok=True)
+    def _next_flat_path(self, base_dir: Path, slug: str, ext: str, template: str) -> Path:
+        """Generate next flat filename with auto-incremented sequence."""
+        date = time.strftime("%Y%m%d")
+        existing = list(base_dir.glob(f"{slug}_{date}_*.{ext}"))
+        seq = len(existing) + 1
+        stem = template.format(slug=slug, date=date, seq=seq)
+        return base_dir / f"{stem}.{ext}"
 
-        # Copy audio file into structured directory
+    async def execute(self, input_data: OutputInput) -> OutputResult:
+        config = input_data.output_config
         src = Path(input_data.audio.file_path)
-        dest = out_dir / src.name
+
+        if config:
+            base_dir = Path(config.base_dir)
+            base_dir.mkdir(parents=True, exist_ok=True)
+
+            if config.naming == "flat":
+                slug = self._slugify(input_data.style.prompt)
+                dest = self._next_flat_path(
+                    base_dir, slug, src.suffix.lstrip("."), config.filename_template
+                )
+            else:
+                style_slug = self._slugify(input_data.style.prompt)
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                out_dir = base_dir / style_slug / timestamp
+                out_dir.mkdir(parents=True, exist_ok=True)
+                dest = out_dir / src.name
+        else:
+            base_dir = Path(input_data.output_dir)
+            style_slug = self._slugify(input_data.style.prompt)
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            out_dir = base_dir / style_slug / timestamp
+            out_dir.mkdir(parents=True, exist_ok=True)
+            dest = out_dir / src.name
+
+        # Copy audio file
         if src.resolve() != dest.resolve():
             import shutil
             shutil.copy2(str(src), str(dest))
@@ -109,14 +137,16 @@ class OutputWorker(MusicTool[OutputInput, OutputResult]):
         }
 
         # Write metadata JSON
-        meta_file = out_dir / f"{src.stem}_metadata.json"
-        meta_file.write_text(json.dumps(metadata, indent=2, ensure_ascii=False))
+        meta_file: Path | None = None
+        if not config or config.create_metadata:
+            meta_file = dest.parent / f"{dest.stem}_metadata.json"
+            meta_file.write_text(json.dumps(metadata, indent=2, ensure_ascii=False))
 
         logger.info("Output written: %s", final_path)
 
         return OutputResult(
             audio_path=final_path,
-            metadata_path=str(meta_file),
+            metadata_path=str(meta_file) if meta_file else None,
             duration_seconds=input_data.audio.duration_seconds,
             format=input_data.audio.format,
             sample_rate=input_data.audio.sample_rate,

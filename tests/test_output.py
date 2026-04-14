@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from ace_music.schemas.audio import ProcessedAudio
+from ace_music.schemas.output_config import OutputConfig
 from ace_music.schemas.style import StyleOutput
 from ace_music.tools.output import OutputInput, OutputWorker
 
@@ -102,3 +103,79 @@ class TestOutputWorkerStructuredDir:
             )
         )
         assert Path(result.audio_path).exists()
+
+
+class TestOutputWorkerFlatNaming:
+    @pytest.mark.asyncio
+    async def test_flat_naming_creates_descriptive_filename(self, worker, sample_audio, tmp_path):
+        """Flat mode should create {slug}_{date}_{seq:03d}.wav directly in base_dir."""
+        config = OutputConfig(base_dir=str(tmp_path / "music"), naming="flat")
+        result = await worker.execute(
+            OutputInput(
+                audio=sample_audio,
+                style=StyleOutput(prompt="suspense, dark, thriller"),
+                seed=42,
+                description="test",
+                output_config=config,
+            )
+        )
+        path = Path(result.audio_path)
+        assert path.parent == tmp_path / "music"
+        assert "suspense" in path.stem
+        assert path.suffix == ".wav"
+
+    @pytest.mark.asyncio
+    async def test_flat_naming_auto_increments_sequence(self, worker, sample_audio, tmp_path):
+        """Multiple runs should auto-increment the sequence number."""
+        config = OutputConfig(base_dir=str(tmp_path / "music"), naming="flat")
+        result1 = await worker.execute(
+            OutputInput(
+                audio=sample_audio,
+                style=StyleOutput(prompt="pop"),
+                seed=1,
+                output_config=config,
+            )
+        )
+        result2 = await worker.execute(
+            OutputInput(
+                audio=sample_audio,
+                style=StyleOutput(prompt="pop"),
+                seed=2,
+                output_config=config,
+            )
+        )
+        stem1 = Path(result1.audio_path).stem
+        stem2 = Path(result2.audio_path).stem
+        assert stem1.rsplit("_", 1)[-1] != stem2.rsplit("_", 1)[-1]
+
+    @pytest.mark.asyncio
+    async def test_flat_naming_writes_metadata(self, worker, sample_audio, tmp_path):
+        """Flat mode should still write metadata JSON alongside audio."""
+        config = OutputConfig(base_dir=str(tmp_path / "music"), naming="flat")
+        result = await worker.execute(
+            OutputInput(
+                audio=sample_audio,
+                style=StyleOutput(prompt="ambient"),
+                seed=42,
+                output_config=config,
+            )
+        )
+        assert result.metadata_path is not None
+        assert Path(result.metadata_path).exists()
+        metadata = json.loads(Path(result.metadata_path).read_text())
+        assert metadata["seed"] == 42
+
+    @pytest.mark.asyncio
+    async def test_nested_mode_unchanged_when_no_config(self, worker, sample_audio, tmp_path):
+        """Without OutputConfig, behavior should be identical to current nested mode."""
+        result = await worker.execute(
+            OutputInput(
+                audio=sample_audio,
+                style=StyleOutput(prompt="electronic, synthwave"),
+                seed=42,
+                output_dir=str(tmp_path / "output"),
+            )
+        )
+        path = Path(result.audio_path)
+        assert path.parent.parent.name == "electronic"
+        assert path.exists()
