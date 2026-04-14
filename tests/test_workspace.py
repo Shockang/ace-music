@@ -3,9 +3,7 @@
 import json
 from pathlib import Path
 
-import pytest
-
-from ace_music.schemas.repair import ArtifactRecord, ArtifactStatus, RunManifest
+from ace_music.schemas.repair import ArtifactStatus
 from ace_music.workspace import WorkspaceManager
 
 
@@ -26,7 +24,7 @@ class TestWorkspaceManager:
 
     def test_update_artifact(self, tmp_path):
         wm = WorkspaceManager(base_dir=str(tmp_path / "output"))
-        run_dir = wm.create_run("run_001", description="test")
+        _run_dir = wm.create_run("run_001", description="test")
         wm.update_artifact(
             run_id="run_001",
             stage="generator",
@@ -38,7 +36,7 @@ class TestWorkspaceManager:
 
     def test_load_manifest_roundtrip(self, tmp_path):
         wm = WorkspaceManager(base_dir=str(tmp_path / "output"))
-        run_dir = wm.create_run("run_001", description="roundtrip test", seed=42)
+        _run_dir = wm.create_run("run_001", description="roundtrip test", seed=42)
         wm.update_artifact("run_001", "style_planner", ArtifactStatus.COMPLETED)
 
         loaded = wm.load_manifest("run_001")

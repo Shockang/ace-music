@@ -1,10 +1,10 @@
 """Tests for PresetResolver tool."""
 
-import pytest
-from pathlib import Path
 
-from ace_music.schemas.preset import StylePreset, PresetFile
-from ace_music.tools.preset_resolver import PresetResolver, PresetMatch
+import pytest
+
+from ace_music.schemas.preset import PresetFile, StylePreset
+from ace_music.tools.preset_resolver import PresetMatch, PresetResolver
 
 
 @pytest.fixture

@@ -1,18 +1,15 @@
 """Tests for run manifest, repair tickets, and resume functionality."""
 
-import json
-from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
 
 from ace_music.agent import MusicAgent
 from ace_music.schemas.pipeline import PipelineOutput
 from ace_music.schemas.repair import (
-    ArtifactStatus,
     ArtifactRecord,
-    RunManifest,
+    ArtifactStatus,
     RepairTicket,
+    RunManifest,
 )
 from ace_music.tools.generator import GeneratorConfig
 from ace_music.workspace import WorkspaceManager
@@ -73,9 +70,15 @@ class TestRunManifest:
             run_id="run_1",
             description="test",
             artifacts={
-                "lyrics_planner": ArtifactRecord(stage="lyrics_planner", status=ArtifactStatus.COMPLETED),
-                "style_planner": ArtifactRecord(stage="style_planner", status=ArtifactStatus.COMPLETED),
-                "generator": ArtifactRecord(stage="generator", status=ArtifactStatus.FAILED),
+                "lyrics_planner": ArtifactRecord(
+                    stage="lyrics_planner", status=ArtifactStatus.COMPLETED
+                ),
+                "style_planner": ArtifactRecord(
+                    stage="style_planner", status=ArtifactStatus.COMPLETED
+                ),
+                "generator": ArtifactRecord(
+                    stage="generator", status=ArtifactStatus.FAILED
+                ),
             },
         )
         assert manifest.completed_stages == ["lyrics_planner", "style_planner"]
@@ -85,9 +88,15 @@ class TestRunManifest:
             run_id="run_1",
             description="test",
             artifacts={
-                "lyrics_planner": ArtifactRecord(stage="lyrics_planner", status=ArtifactStatus.COMPLETED),
-                "style_planner": ArtifactRecord(stage="style_planner", status=ArtifactStatus.COMPLETED),
-                "generator": ArtifactRecord(stage="generator", status=ArtifactStatus.FAILED),
+                "lyrics_planner": ArtifactRecord(
+                    stage="lyrics_planner", status=ArtifactStatus.COMPLETED
+                ),
+                "style_planner": ArtifactRecord(
+                    stage="style_planner", status=ArtifactStatus.COMPLETED
+                ),
+                "generator": ArtifactRecord(
+                    stage="generator", status=ArtifactStatus.FAILED
+                ),
             },
         )
         assert manifest.next_stage == "generator"
@@ -98,7 +107,10 @@ class TestRunManifest:
             description="test",
             artifacts={
                 s: ArtifactRecord(stage=s, status=ArtifactStatus.COMPLETED)
-                for s in ["lyrics_planner", "style_planner", "generator", "post_processor", "output"]
+                for s in [
+                    "lyrics_planner", "style_planner", "generator",
+                    "post_processor", "output",
+                ]
             },
         )
         assert manifest.next_stage is None

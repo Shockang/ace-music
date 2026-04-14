@@ -10,7 +10,6 @@ Creates and manages the output directory layout:
         final/      -- final output + metadata JSON
 """
 
-import json
 import logging
 import time
 from pathlib import Path

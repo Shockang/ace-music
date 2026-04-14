@@ -17,7 +17,7 @@ import random
 from ace_music.resume import stages_to_run
 from ace_music.schemas.pipeline import PipelineInput, PipelineOutput
 from ace_music.schemas.repair import ArtifactStatus
-from ace_music.tools.generator import ACEStepGenerator, GeneratorConfig, GenerationInput
+from ace_music.tools.generator import ACEStepGenerator, GenerationInput, GeneratorConfig
 from ace_music.tools.lyrics_planner import LyricsPlanner
 from ace_music.tools.output import OutputInput, OutputWorker
 from ace_music.tools.post_processor import PostProcessInput, PostProcessor
@@ -91,11 +91,12 @@ class MusicAgent:
         """
         plan = self._build_plan(input_data)
         logger.info("Pipeline plan: %s", " -> ".join(plan))
-        seed = input_data.seed if input_data.seed is not None else random.randint(0, 2**32 - 1)
+        seed = input_data.seed if input_data.seed is not None else random.randint(
+            0, 2**32 - 1
+        )
 
-        if workspace and run_id:
-            if not workspace._manifest_path(run_id).exists():
-                workspace.create_run(run_id, description=input_data.description, seed=seed)
+        if workspace and run_id and not workspace._manifest_path(run_id).exists():
+            workspace.create_run(run_id, description=input_data.description, seed=seed)
 
         # Stage 1: Lyrics planning
         lyrics_output = None
@@ -127,7 +128,10 @@ class MusicAgent:
                 preset = match.preset
                 logger.info("Resolved preset: %s (confidence=%.2f)", preset.id, match.confidence)
             else:
-                logger.warning("Preset '%s' not found, using heuristic style", input_data.preset_name)
+                logger.warning(
+                    "Preset '%s' not found, using heuristic style",
+                    input_data.preset_name,
+                )
 
         style_input = StyleInput(
             description=input_data.description,

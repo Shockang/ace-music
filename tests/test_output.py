@@ -7,7 +7,7 @@ import pytest
 
 from ace_music.schemas.audio import ProcessedAudio
 from ace_music.schemas.style import StyleOutput
-from ace_music.tools.output import OutputInput, OutputResult, OutputWorker
+from ace_music.tools.output import OutputInput, OutputWorker
 
 
 @pytest.fixture
@@ -26,7 +26,7 @@ def sample_audio(tmp_path):
         wf.setnchannels(2)
         wf.setsampwidth(2)
         wf.setframerate(48000)
-        for i in range(4800):  # 0.1s
+        for _i in range(4800):  # 0.1s
             wf.writeframesraw(struct.pack("<h", 0) * 2)
     return ProcessedAudio(
         file_path=str(filepath),

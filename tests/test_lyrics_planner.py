@@ -3,7 +3,7 @@
 import pytest
 
 from ace_music.schemas.lyrics import LyricsInput, LyricsOutput, SegmentType
-from ace_music.tools.lyrics_planner import LyricsPlanner, _auto_segment, _format_for_ace_step
+from ace_music.tools.lyrics_planner import LyricsPlanner, _format_for_ace_step
 
 
 @pytest.fixture

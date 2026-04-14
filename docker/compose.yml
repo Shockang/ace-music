@@ -1,0 +1,29 @@
+name: ace-music
+
+services:
+  test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: ace-music-test
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+    volumes:
+      - test-results:/app/test-results
+    profiles:
+      - test
+
+  # Interactive shell for manual debugging
+  shell:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: ace-music-shell
+    stdin_open: true
+    tty: true
+    entrypoint: ["/bin/bash"]
+    profiles:
+      - shell
+
+volumes:
+  test-results:

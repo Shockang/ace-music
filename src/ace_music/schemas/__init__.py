@@ -4,7 +4,7 @@ from .audio import AudioOutput, ProcessedAudio
 from .lyrics import LyricSegment, LyricsInput, LyricsOutput, SegmentType
 from .pipeline import PipelineInput, PipelineOutput
 from .preset import PresetFile, PresetStyleOverrides, StylePreset
-from .repair import ArtifactRecord, ArtifactStatus, PIPELINE_STAGES, RepairTicket, RunManifest
+from .repair import PIPELINE_STAGES, ArtifactRecord, ArtifactStatus, RepairTicket, RunManifest
 from .style import StyleInput, StyleOutput
 
 __all__ = [

@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from ace_music.schemas.preset import StylePreset, PresetFile, PresetStyleOverrides
+from ace_music.schemas.preset import PresetFile, StylePreset
 
 
 class TestStylePreset:

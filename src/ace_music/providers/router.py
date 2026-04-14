@@ -6,7 +6,7 @@ bound to a specific provider. Unbound features fall back to the default.
 
 import logging
 
-from .base import ChatMessage, ChatResponse, ChatProvider
+from .base import ChatMessage, ChatProvider, ChatResponse
 
 logger = logging.getLogger(__name__)
 

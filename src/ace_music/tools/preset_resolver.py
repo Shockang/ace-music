@@ -70,7 +70,9 @@ class PresetResolver:
                 return preset
         return None
 
-    async def resolve(self, query: str, threshold: float = FUZZY_MATCH_THRESHOLD) -> PresetMatch | None:
+    async def resolve(
+        self, query: str, threshold: float = FUZZY_MATCH_THRESHOLD
+    ) -> PresetMatch | None:
         """Resolve a natural language query to the best matching preset."""
         self._load()
         query_lower = query.lower().strip()

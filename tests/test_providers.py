@@ -7,6 +7,7 @@ import pytest
 
 from ace_music.providers.base import ChatMessage, ChatResponse
 from ace_music.providers.deepseek import DeepSeekProvider
+from ace_music.providers.router import FeatureRouter
 
 
 class FakeProvider:
@@ -72,9 +73,6 @@ class TestDeepSeekProvider:
                 DeepSeekProvider()
 
 
-from ace_music.providers.router import FeatureRouter
-
-
 class FakeProviderA:
     @property
     def name(self) -> str:
@@ -101,7 +99,9 @@ class TestFeatureRouter:
     @pytest.mark.asyncio
     async def test_route_to_default(self):
         router = FeatureRouter(default=FakeProviderA())
-        response = await router.complete("lyrics_planning", [ChatMessage(role="user", content="test")])
+        response = await router.complete(
+            "lyrics_planning", [ChatMessage(role="user", content="test")]
+        )
         assert response.content == "response from A"
 
     @pytest.mark.asyncio
@@ -110,7 +110,9 @@ class TestFeatureRouter:
             default=FakeProviderA(),
             feature_providers={"style_planning": FakeProviderB()},
         )
-        response = await router.complete("style_planning", [ChatMessage(role="user", content="test")])
+        response = await router.complete(
+            "style_planning", [ChatMessage(role="user", content="test")]
+        )
         assert response.content == "response from B"
 
     @pytest.mark.asyncio
@@ -119,7 +121,9 @@ class TestFeatureRouter:
             default=FakeProviderA(),
             feature_providers={"style_planning": FakeProviderB()},
         )
-        response = await router.complete("unknown_feature", [ChatMessage(role="user", content="test")])
+        response = await router.complete(
+            "unknown_feature", [ChatMessage(role="user", content="test")]
+        )
         assert response.content == "response from A"
 
     def test_list_providers(self):
