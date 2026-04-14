@@ -39,6 +39,13 @@ def sample_audio(tmp_path):
     )
 
 
+class TestVersionConsistency:
+    def test_metadata_uses_package_version(self):
+        """OutputWorker metadata should use the package version, not hardcoded string."""
+        import ace_music
+        assert ace_music.__version__ == "0.2.0"
+
+
 class TestOutputWorkerStructuredDir:
     @pytest.mark.asyncio
     async def test_creates_style_subdirectory(self, worker, sample_audio, tmp_path):

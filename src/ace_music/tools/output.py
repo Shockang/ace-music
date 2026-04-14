@@ -8,6 +8,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+import ace_music
 from ace_music.schemas.audio import ProcessedAudio
 from ace_music.schemas.style import StyleOutput
 from ace_music.tools.base import MusicTool
@@ -87,7 +88,7 @@ class OutputWorker(MusicTool[OutputInput, OutputResult]):
         # Build metadata
         metadata = {
             "generator": "ace-music",
-            "version": "0.1.0",
+            "version": ace_music.__version__,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
             "description": input_data.description,
             "style": {
