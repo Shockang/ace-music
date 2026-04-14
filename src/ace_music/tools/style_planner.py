@@ -9,6 +9,7 @@ Supports:
 
 import re
 
+from ace_music.schemas.preset import StylePreset
 from ace_music.schemas.style import (
     GENRE_TAG_MAP,
     MOOD_TAG_MAP,
@@ -90,7 +91,9 @@ class StylePlanner(MusicTool[StyleInput, StyleOutput]):
     def output_schema(self) -> type[StyleOutput]:
         return StyleOutput
 
-    async def execute(self, input_data: StyleInput) -> StyleOutput:
+    async def execute(
+        self, input_data: StyleInput, preset: StylePreset | None = None
+    ) -> StyleOutput:
         # Start with user-provided tags
         all_tags = list(input_data.reference_tags)
 
@@ -107,11 +110,40 @@ class StylePlanner(MusicTool[StyleInput, StyleOutput]):
                 if tag not in all_tags:
                     all_tags.append(tag)
 
-        # If no tags found, use the description itself as the prompt
-        prompt = ", ".join(all_tags) if all_tags else input_data.description
+        # Build prompt
+        if preset:
+            preset_tags = [t.strip() for t in preset.prompt.split(",") if t.strip()]
+            for tag in preset_tags:
+                if tag not in all_tags:
+                    all_tags.append(tag)
+            prompt = ", ".join(all_tags) if all_tags else preset.prompt
+        else:
+            prompt = ", ".join(all_tags) if all_tags else input_data.description
 
-        # Parse tempo preference into parameter adjustments
+        # Parse tempo preference
         tempo_overrides = _parse_tempo(input_data.tempo_preference)
+
+        # Determine parameters
+        if preset:
+            overrides = preset.to_style_overrides()
+            guidance_scale = tempo_overrides.get(
+                "guidance_scale", overrides.guidance_scale
+            )
+            omega_scale = tempo_overrides.get("omega_scale", overrides.omega_scale)
+            return StyleOutput(
+                prompt=prompt,
+                guidance_scale=guidance_scale,
+                omega_scale=omega_scale,
+                infer_step=overrides.infer_step,
+                scheduler_type=overrides.scheduler_type,
+                cfg_type=overrides.cfg_type,
+                guidance_interval=overrides.guidance_interval,
+                guidance_interval_decay=overrides.guidance_interval_decay,
+                min_guidance_scale=overrides.min_guidance_scale,
+                use_erg_tag=overrides.use_erg_tag,
+                use_erg_lyric=overrides.use_erg_lyric,
+                use_erg_diffusion=overrides.use_erg_diffusion,
+            )
 
         return StyleOutput(
             prompt=prompt,

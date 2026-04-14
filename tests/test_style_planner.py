@@ -89,3 +89,56 @@ class TestDefaults:
         assert result.cfg_type == "apg"
         assert result.infer_step == 60
         assert result.use_erg_tag is True
+
+
+class TestStylePlannerWithPreset:
+    @pytest.mark.asyncio
+    async def test_preset_overrides_applied(self, planner):
+        """When a preset matches, its parameters should override defaults."""
+        from ace_music.schemas.preset import StylePreset
+
+        preset = StylePreset(
+            id="electronic_fast",
+            name="Fast Electronic",
+            description="High-energy",
+            prompt="electronic, synth, fast",
+            guidance_scale=18.0,
+            omega_scale=12.0,
+            infer_step=40,
+        )
+        result = await planner.execute(
+            StyleInput(description="electronic dance music"),
+            preset=preset,
+        )
+        assert result.guidance_scale == 18.0
+        assert result.omega_scale == 12.0
+        assert result.infer_step == 40
+        assert "electronic" in result.prompt
+
+    @pytest.mark.asyncio
+    async def test_preset_prompt_used_when_no_reference_tags(self, planner):
+        """Preset prompt should be used as base when no reference tags given."""
+        from ace_music.schemas.preset import StylePreset
+
+        preset = StylePreset(
+            id="ambient_chill",
+            name="Ambient Chill",
+            description="Relaxed ambient",
+            prompt="ambient, atmospheric, chill, relaxed",
+            guidance_scale=12.0,
+        )
+        result = await planner.execute(
+            StyleInput(description="something calm"),
+            preset=preset,
+        )
+        assert "ambient" in result.prompt
+        assert result.guidance_scale == 12.0
+
+    @pytest.mark.asyncio
+    async def test_no_preset_uses_existing_behavior(self, planner):
+        """Without a preset, existing heuristic behavior should work."""
+        result = await planner.execute(
+            StyleInput(description="a dreamy synthwave track")
+        )
+        assert "synthwave" in result.prompt
+        assert result.guidance_scale == 15.0
