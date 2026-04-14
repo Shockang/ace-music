@@ -13,3 +13,5 @@ output/
 *.mp3
 *.flac
 .DS_Store
+.env
+.env.*

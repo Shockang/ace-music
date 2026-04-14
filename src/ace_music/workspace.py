@@ -104,6 +104,10 @@ class WorkspaceManager:
             if d.is_dir() and (d / "manifest.json").exists()
         )
 
+    def manifest_exists(self, run_id: str) -> bool:
+        """Check if a manifest exists for a run."""
+        return self._manifest_path(run_id).exists()
+
     def stage_dir(self, run_id: str, stage: str) -> str:
         """Get the output directory for a specific stage within a run."""
         dir_name = STAGE_DIRS.get(stage, stage)

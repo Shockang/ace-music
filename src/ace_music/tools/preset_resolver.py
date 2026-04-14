@@ -49,6 +49,9 @@ class PresetResolver:
         for yaml_file in sorted(self._presets_dir.glob("*.yaml")):
             try:
                 data = yaml.safe_load(yaml_file.read_text())
+                if data is None:
+                    logger.warning("Empty preset file: %s", yaml_file.name)
+                    continue
                 pf = PresetFile.model_validate(data)
                 self._presets.extend(pf.presets)
                 logger.info("Loaded %d presets from %s", len(pf.presets), yaml_file.name)
@@ -88,7 +91,7 @@ class PresetResolver:
                 return PresetMatch(preset=preset, confidence=1.0, match_method="exact_name")
 
         # Strategy 3: fuzzy keyword match
-        query_words = set(query_lower.split())
+        query_words = set(query_lower.replace("-", " ").replace(",", " ").split())
         best_match: PresetMatch | None = None
         best_score = 0.0
 

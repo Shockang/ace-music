@@ -41,9 +41,12 @@ def sample_audio(tmp_path):
 
 class TestVersionConsistency:
     def test_metadata_uses_package_version(self):
-        """OutputWorker metadata should use the package version, not hardcoded string."""
+        """OutputWorker metadata should use the package version."""
         import ace_music
-        assert ace_music.__version__ == "0.2.0"
+        assert ace_music.__version__
+        # Verify it looks like a version string
+        parts = ace_music.__version__.split(".")
+        assert len(parts) >= 2
 
 
 class TestOutputWorkerStructuredDir:

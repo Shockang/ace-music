@@ -60,12 +60,22 @@ class DeepSeekProvider:
             "max_tokens": kwargs.get("max_tokens", 2048),
         }
 
-        result = await self._call_api(payload)
-        content = result["choices"][0]["message"]["content"]
-        usage = result.get("usage", {})
+        try:
+            result = await self._call_api(payload)
+        except Exception as e:
+            raise RuntimeError(f"DeepSeek API request failed: {e}") from e
+
+        choices = result.get("choices")
+        if not choices or not isinstance(choices, list):
+            raise RuntimeError(f"DeepSeek returned unexpected response: {result}")
+
+        message = choices[0].get("message", {})
+        content = message.get("content")
+        if not content:
+            raise RuntimeError(f"DeepSeek returned empty content: {result}")
 
         return ChatResponse(
             content=content,
             model=result.get("model", self._model),
-            usage=usage,
+            usage=result.get("usage", {}),
         )
