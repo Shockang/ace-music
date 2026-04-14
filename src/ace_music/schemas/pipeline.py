@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel, Field
 
+from ace_music.schemas.output_config import OutputConfig
+
 
 class PipelineInput(BaseModel):
     """Top-level input to the MusicAgent pipeline."""
@@ -32,6 +34,9 @@ class PipelineInput(BaseModel):
     )
     guidance_scale: float | None = None
     infer_step: int | None = None
+    output_config: OutputConfig | None = Field(
+        default=None, description="Output configuration (naming, path, metadata)"
+    )
 
 
 class PipelineOutput(BaseModel):

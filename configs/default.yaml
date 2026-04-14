@@ -38,3 +38,7 @@ post_processing:
 output:
   save_dir: "./output"
   include_metadata: true
+  naming: "nested"                    # "nested" (dev) or "flat" (production/Obsidian)
+  filename_template: "{slug}_{date}_{seq:03d}"
+  # Uncomment for Obsidian integration:
+  # obsidian_base: "~/Library/Mobile Documents/iCloud~md~obsidian/Documents/AI/outputs/music"

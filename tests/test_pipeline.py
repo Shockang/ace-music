@@ -8,6 +8,7 @@ import pytest
 from ace_music.agent import MusicAgent
 from ace_music.bridge import DirectorBridge
 from ace_music.bridge.director_bridge import pipeline_output_to_response, request_to_pipeline_input
+from ace_music.schemas.output_config import OutputConfig
 from ace_music.schemas.pipeline import PipelineInput, PipelineOutput
 from ace_music.tools.generator import GeneratorConfig
 from ace_music.tools.preset_resolver import PresetResolver
@@ -234,3 +235,20 @@ class TestPipelineManifest:
         manifest = wm.load_manifest(run_id)
         for stage in ["style_planner", "generator", "post_processor", "output"]:
             assert manifest.artifacts[stage].status.value == "completed"
+
+
+class TestPipelineWithOutputConfig:
+    @pytest.mark.asyncio
+    async def test_pipeline_passes_output_config_to_worker(self, tmp_path):
+        """MusicAgent should pass OutputConfig through to OutputWorker."""
+        agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
+        config = OutputConfig(base_dir=str(tmp_path / "flat_output"), naming="flat")
+        result = await agent.run(
+            PipelineInput(
+                description="test flat output",
+                duration_seconds=5.0,
+                output_config=config,
+            )
+        )
+        assert Path(result.audio_path).parent == tmp_path / "flat_output"
+        assert Path(result.audio_path).exists()

@@ -196,6 +196,7 @@ class MusicAgent:
             lyrics_text=lyrics_output.formatted_lyrics if lyrics_output else "",
             description=input_data.description,
             output_dir=input_data.output_dir,
+            output_config=input_data.output_config,
         )
         result = await self._output_worker.execute(out_input)
         logger.info("Output: %s", result.audio_path)
