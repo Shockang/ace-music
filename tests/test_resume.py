@@ -6,12 +6,16 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from ace_music.agent import MusicAgent
+from ace_music.schemas.pipeline import PipelineOutput
 from ace_music.schemas.repair import (
     ArtifactStatus,
     ArtifactRecord,
     RunManifest,
     RepairTicket,
 )
+from ace_music.tools.generator import GeneratorConfig
+from ace_music.workspace import WorkspaceManager
 
 
 class TestArtifactRecord:
@@ -133,3 +137,38 @@ class TestRepairTicket:
         )
         assert ticket.recoverable is False
         assert ticket.suggested_fix is None
+
+
+class TestResumeFromManifest:
+    @pytest.mark.asyncio
+    async def test_resume_skips_completed_stages(self, tmp_path):
+        """Resume should skip stages already marked COMPLETED in manifest."""
+        wm = WorkspaceManager(base_dir=str(tmp_path / "output"))
+        wm.create_run("run_resume_1", description="resume test", seed=42)
+
+        wm.update_artifact("run_resume_1", "lyrics_planner", ArtifactStatus.COMPLETED)
+        wm.update_artifact("run_resume_1", "style_planner", ArtifactStatus.COMPLETED)
+
+        config = GeneratorConfig(mock_mode=True)
+        agent = MusicAgent(generator_config=config)
+
+        result = await agent.resume(run_id="run_resume_1", workspace=wm)
+        assert result is not None
+        assert isinstance(result, PipelineOutput)
+
+        manifest = wm.load_manifest("run_resume_1")
+        for stage in ["lyrics_planner", "style_planner", "generator", "post_processor", "output"]:
+            assert manifest.artifacts[stage].status == ArtifactStatus.COMPLETED
+
+    @pytest.mark.asyncio
+    async def test_resume_from_beginning(self, tmp_path):
+        """Resume with empty manifest should run all stages."""
+        wm = WorkspaceManager(base_dir=str(tmp_path / "output"))
+        wm.create_run("run_fresh", description="fresh run")
+
+        config = GeneratorConfig(mock_mode=True)
+        agent = MusicAgent(generator_config=config)
+
+        result = await agent.resume(run_id="run_fresh", workspace=wm)
+        assert result is not None
+        assert result.audio_path

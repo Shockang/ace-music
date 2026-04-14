@@ -14,13 +14,16 @@ to run in what order), then executes sequentially, passing outputs forward.
 import logging
 import random
 
+from ace_music.resume import stages_to_run
 from ace_music.schemas.pipeline import PipelineInput, PipelineOutput
+from ace_music.schemas.repair import ArtifactStatus
 from ace_music.tools.generator import ACEStepGenerator, GeneratorConfig, GenerationInput
 from ace_music.tools.lyrics_planner import LyricsPlanner
 from ace_music.tools.output import OutputInput, OutputWorker
 from ace_music.tools.post_processor import PostProcessInput, PostProcessor
 from ace_music.tools.preset_resolver import PresetResolver
 from ace_music.tools.style_planner import StylePlanner
+from ace_music.workspace import WorkspaceManager
 
 logger = logging.getLogger(__name__)
 
@@ -70,11 +73,18 @@ class MusicAgent:
 
         return plan
 
-    async def run(self, input_data: PipelineInput) -> PipelineOutput:
+    async def run(
+        self,
+        input_data: PipelineInput,
+        workspace: WorkspaceManager | None = None,
+        run_id: str | None = None,
+    ) -> PipelineOutput:
         """Execute the full music generation pipeline.
 
         Args:
             input_data: Pipeline input with description, style, duration, etc.
+            workspace: Optional workspace for manifest tracking.
+            run_id: Optional run ID for manifest tracking.
 
         Returns:
             PipelineOutput with final audio path and metadata.
@@ -82,6 +92,10 @@ class MusicAgent:
         plan = self._build_plan(input_data)
         logger.info("Pipeline plan: %s", " -> ".join(plan))
         seed = input_data.seed if input_data.seed is not None else random.randint(0, 2**32 - 1)
+
+        if workspace and run_id:
+            if not workspace._manifest_path(run_id).exists():
+                workspace.create_run(run_id, description=input_data.description, seed=seed)
 
         # Stage 1: Lyrics planning
         lyrics_output = None
@@ -99,6 +113,8 @@ class MusicAgent:
                 len(lyrics_output.segments),
                 lyrics_output.is_instrumental,
             )
+            if workspace and run_id:
+                workspace.update_artifact(run_id, "lyrics_planner", ArtifactStatus.COMPLETED)
 
         # Stage 2: Style planning
         from ace_music.schemas.style import StyleInput
@@ -131,6 +147,8 @@ class MusicAgent:
 
         logger.info("Style: prompt=%r, guidance=%.1f, steps=%d",
                      style_output.prompt, style_output.guidance_scale, style_output.infer_step)
+        if workspace and run_id:
+            workspace.update_artifact(run_id, "style_planner", ArtifactStatus.COMPLETED)
 
         # Stage 3: Generation
         from ace_music.schemas.lyrics import LyricsOutput
@@ -148,6 +166,11 @@ class MusicAgent:
         )
         audio_output = await self._generator.execute(gen_input)
         logger.info("Generated: %s (%.1fs)", audio_output.file_path, audio_output.duration_seconds)
+        if workspace and run_id:
+            workspace.update_artifact(
+                run_id, "generator", ArtifactStatus.COMPLETED,
+                file_path=audio_output.file_path,
+            )
 
         # Stage 4: Post-processing
         pp_input = PostProcessInput(
@@ -157,6 +180,8 @@ class MusicAgent:
         )
         processed = await self._post_processor.execute(pp_input)
         logger.info("Post-processed: %s", processed.file_path)
+        if workspace and run_id:
+            workspace.update_artifact(run_id, "post_processor", ArtifactStatus.COMPLETED)
 
         # Stage 5: Output
         out_input = OutputInput(
@@ -169,6 +194,8 @@ class MusicAgent:
         )
         result = await self._output_worker.execute(out_input)
         logger.info("Output: %s", result.audio_path)
+        if workspace and run_id:
+            workspace.update_artifact(run_id, "output", ArtifactStatus.COMPLETED)
 
         # Build pipeline output
         segments_info = []
@@ -189,3 +216,105 @@ class MusicAgent:
             metadata=result.metadata,
             segments=segments_info,
         )
+
+    async def resume(
+        self,
+        run_id: str,
+        workspace: WorkspaceManager,
+    ) -> PipelineOutput | None:
+        """Resume a pipeline run from the last completed stage."""
+        from ace_music.schemas.lyrics import LyricsInput, LyricsOutput
+        from ace_music.schemas.style import StyleInput, StyleOutput
+        from ace_music.tools.generator import GenerationInput
+        from ace_music.tools.post_processor import PostProcessInput
+
+        manifest = workspace.load_manifest(run_id)
+        remaining = stages_to_run(manifest)
+
+        if not remaining:
+            logger.info("Run %s is already complete", run_id)
+            return None
+
+        logger.info("Resuming run %s from stage: %s", run_id, remaining[0])
+
+        input_data = PipelineInput(
+            description=manifest.description,
+            seed=manifest.seed,
+            preset_name=manifest.preset_name,
+            output_dir=workspace.stage_dir(run_id, "final"),
+        )
+
+        seed = manifest.seed or random.randint(0, 2**32 - 1)
+
+        # Stage 1: Lyrics planning
+        lyrics_output = None
+        if "lyrics_planner" in remaining:
+            lyrics_input = LyricsInput(
+                raw_text=input_data.description,
+                is_instrumental=input_data.is_instrumental,
+            )
+            lyrics_output = await self._lyrics_planner.execute(lyrics_input)
+            workspace.update_artifact(run_id, "lyrics_planner", ArtifactStatus.COMPLETED)
+
+        # Stage 2: Style planning
+        style_output = None
+        if "style_planner" in remaining:
+            preset = None
+            if input_data.preset_name:
+                match = await self._preset_resolver.resolve(input_data.preset_name)
+                if match:
+                    preset = match.preset
+
+            style_input = StyleInput(description=input_data.description)
+            style_output = await self._style_planner.execute(style_input, preset=preset)
+            workspace.update_artifact(run_id, "style_planner", ArtifactStatus.COMPLETED)
+
+        # Stage 3: Generation
+        audio_output = None
+        if "generator" in remaining:
+            gen_input = GenerationInput(
+                lyrics=lyrics_output or LyricsOutput(
+                    formatted_lyrics="", is_instrumental=True
+                ),
+                style=style_output or StyleOutput(prompt=input_data.description),
+                audio_duration=input_data.duration_seconds,
+                seed=seed,
+                output_dir=workspace.stage_dir(run_id, "generator"),
+            )
+            audio_output = await self._generator.execute(gen_input)
+            workspace.update_artifact(
+                run_id, "generator", ArtifactStatus.COMPLETED,
+                file_path=audio_output.file_path,
+            )
+
+        # Stage 4: Post-processing
+        processed = None
+        if "post_processor" in remaining and audio_output:
+            pp_input = PostProcessInput(
+                audio=audio_output,
+                output_dir=workspace.stage_dir(run_id, "post_processor"),
+            )
+            processed = await self._post_processor.execute(pp_input)
+            workspace.update_artifact(run_id, "post_processor", ArtifactStatus.COMPLETED)
+
+        # Stage 5: Output
+        if "output" in remaining and processed:
+            out_input = OutputInput(
+                audio=processed,
+                style=style_output or StyleOutput(prompt=input_data.description),
+                seed=seed,
+                description=input_data.description,
+                output_dir=workspace.stage_dir(run_id, "output"),
+            )
+            result = await self._output_worker.execute(out_input)
+            workspace.update_artifact(run_id, "output", ArtifactStatus.COMPLETED)
+
+            return PipelineOutput(
+                audio_path=result.audio_path,
+                duration_seconds=result.duration_seconds,
+                format=result.format,
+                sample_rate=result.sample_rate,
+                metadata=result.metadata,
+            )
+
+        return None

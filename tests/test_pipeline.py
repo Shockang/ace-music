@@ -207,3 +207,30 @@ class TestPipelineWithPreset:
         )
         assert isinstance(result, PipelineOutput)
         assert result.audio_path
+
+
+class TestPipelineManifest:
+    @pytest.mark.asyncio
+    async def test_run_creates_manifest(self, agent, tmp_path):
+        """Normal run() should create a manifest with all stages completed."""
+        from ace_music.workspace import WorkspaceManager
+
+        wm = WorkspaceManager(base_dir=str(tmp_path / "output"))
+        run_id = "test_manifest_run"
+        wm.create_run(run_id, description="manifest test")
+
+        result = await agent.run(
+            PipelineInput(
+                description="ambient chill",
+                duration_seconds=5.0,
+                seed=42,
+                output_dir=str(tmp_path / "output"),
+            ),
+            workspace=wm,
+            run_id=run_id,
+        )
+        assert result is not None
+
+        manifest = wm.load_manifest(run_id)
+        for stage in ["style_planner", "generator", "post_processor", "output"]:
+            assert manifest.artifacts[stage].status.value == "completed"
