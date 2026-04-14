@@ -42,3 +42,17 @@ output:
   filename_template: "{slug}_{date}_{seq:03d}"
   # Uncomment for Obsidian integration:
   # obsidian_base: "~/Library/Mobile Documents/iCloud~md~obsidian/Documents/AI/outputs/music"
+
+# LLM Provider configuration (optional — pipeline works without LLM)
+# Uncomment and configure when using LLM-assisted lyrics/style planning:
+# providers:
+#   default: deepseek
+#   feature_overrides:
+#     lyrics_planning: deepseek
+#     style_planning: minimax
+#   deepseek:
+#     model: deepseek-chat
+#     base_url: https://api.deepseek.com/v1/chat/completions
+#   minimax:
+#     model: MiniMax-Text-01
+#     base_url: https://api.minimax.chat/v1/chat/completions

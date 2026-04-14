@@ -8,6 +8,8 @@ import pytest
 from ace_music.agent import MusicAgent
 from ace_music.bridge import DirectorBridge
 from ace_music.bridge.director_bridge import pipeline_output_to_response, request_to_pipeline_input
+from ace_music.providers.deepseek import DeepSeekProvider
+from ace_music.providers.router import FeatureRouter
 from ace_music.schemas.output_config import OutputConfig
 from ace_music.schemas.pipeline import PipelineInput, PipelineOutput
 from ace_music.tools.generator import GeneratorConfig
@@ -251,4 +253,40 @@ class TestPipelineWithOutputConfig:
             )
         )
         assert Path(result.audio_path).parent == tmp_path / "flat_output"
+        assert Path(result.audio_path).exists()
+
+
+class TestAgentWithFeatureRouter:
+    def test_agent_accepts_feature_router(self):
+        """MusicAgent should accept an optional FeatureRouter."""
+        provider = DeepSeekProvider(api_key="test-key")
+        router = FeatureRouter(default=provider)
+        agent = MusicAgent(
+            generator_config=GeneratorConfig(mock_mode=True),
+            feature_router=router,
+        )
+        assert agent._feature_router is not None
+
+    def test_agent_works_without_feature_router(self):
+        """MusicAgent should work without a FeatureRouter (backward compatible)."""
+        agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
+        assert agent._feature_router is None
+
+    @pytest.mark.asyncio
+    async def test_pipeline_runs_with_router(self, tmp_path):
+        """Pipeline should work end-to-end with a FeatureRouter configured."""
+        provider = DeepSeekProvider(api_key="test-key")
+        router = FeatureRouter(default=provider)
+        agent = MusicAgent(
+            generator_config=GeneratorConfig(mock_mode=True),
+            feature_router=router,
+        )
+        result = await agent.run(
+            PipelineInput(
+                description="test with router",
+                duration_seconds=5.0,
+                output_dir=str(tmp_path),
+            )
+        )
+        assert result.audio_path
         assert Path(result.audio_path).exists()

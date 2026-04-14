@@ -14,6 +14,7 @@ to run in what order), then executes sequentially, passing outputs forward.
 import logging
 import random
 
+from ace_music.providers.router import FeatureRouter
 from ace_music.resume import stages_to_run
 from ace_music.schemas.audio import AudioOutput, ProcessedAudio
 from ace_music.schemas.pipeline import PipelineInput, PipelineOutput
@@ -44,6 +45,7 @@ class MusicAgent:
         self,
         generator_config: GeneratorConfig | None = None,
         preset_resolver: PresetResolver | None = None,
+        feature_router: FeatureRouter | None = None,
     ) -> None:
         self._lyrics_planner = LyricsPlanner()
         self._style_planner = StylePlanner()
@@ -51,6 +53,7 @@ class MusicAgent:
         self._post_processor = PostProcessor()
         self._output_worker = OutputWorker()
         self._preset_resolver = preset_resolver or PresetResolver()
+        self._feature_router = feature_router
 
     def _build_plan(self, input_data: PipelineInput) -> list[str]:
         """Build execution plan from input. Returns list of tool names to execute."""
