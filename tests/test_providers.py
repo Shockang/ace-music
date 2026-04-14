@@ -7,6 +7,7 @@ import pytest
 
 from ace_music.providers.base import ChatMessage, ChatResponse
 from ace_music.providers.deepseek import DeepSeekProvider
+from ace_music.providers.minimax import MiniMaxProvider
 from ace_music.providers.router import FeatureRouter
 
 
@@ -134,3 +135,48 @@ class TestFeatureRouter:
         providers = router.list_providers()
         assert "provider_a" in providers
         assert "provider_b" in providers
+
+
+class TestMiniMaxProvider:
+    def test_init_requires_api_key(self):
+        """MiniMax provider should require an API key."""
+        original = os.environ.pop("MINIMAX_API_KEY", None)
+        try:
+            with pytest.raises(ValueError, match="API key"):
+                MiniMaxProvider()
+        finally:
+            if original:
+                os.environ["MINIMAX_API_KEY"] = original
+
+    def test_init_with_explicit_key(self):
+        """Explicit API key should work without env var."""
+        provider = MiniMaxProvider(api_key="test-key")
+        assert provider.name == "minimax"
+
+    def test_init_from_env_var(self):
+        """API key from environment variable should work."""
+        os.environ["MINIMAX_API_KEY"] = "env-test-key"
+        try:
+            provider = MiniMaxProvider()
+            assert provider.name == "minimax"
+        finally:
+            del os.environ["MINIMAX_API_KEY"]
+
+    @pytest.mark.asyncio
+    async def test_complete_calls_api(self):
+        """complete() should call the MiniMax API with correct format."""
+        provider = MiniMaxProvider(api_key="test-key", model="MiniMax-Text-01")
+
+        mock_response = {
+            "choices": [{"message": {"content": "Ambient plan: soft pads, slow tempo"}}],
+            "model": "MiniMax-Text-01",
+            "usage": {"total_tokens": 50},
+        }
+
+        with patch.object(provider, "_call_api", new_callable=AsyncMock) as mock_api:
+            mock_api.return_value = mock_response
+            result = await provider.complete(
+                [ChatMessage(role="user", content="Plan ambient music.")]
+            )
+            assert result.content == "Ambient plan: soft pads, slow tempo"
+            assert result.model == "MiniMax-Text-01"
