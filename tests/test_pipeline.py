@@ -290,3 +290,77 @@ class TestAgentWithFeatureRouter:
         )
         assert result.audio_path
         assert Path(result.audio_path).exists()
+
+
+class TestDirectorBridgeEnhanced:
+    def test_request_accepts_scene_description(self):
+        req = DirectorBridge.Request(
+            scene_id="scene_001",
+            mood="suspenseful",
+            duration_seconds=30.0,
+            scene_description="A detective examines evidence in a dimly lit room",
+        )
+        assert req.scene_description == "A detective examines evidence in a dimly lit room"
+
+    def test_request_accepts_intensity(self):
+        req = DirectorBridge.Request(
+            scene_id="scene_002",
+            mood="tense",
+            duration_seconds=30.0,
+            intensity=0.8,
+        )
+        assert req.intensity == 0.8
+
+    def test_request_accepts_preset_name(self):
+        req = DirectorBridge.Request(
+            scene_id="scene_003",
+            mood="dark",
+            duration_seconds=30.0,
+            preset_name="dark_suspense",
+        )
+        assert req.preset_name == "dark_suspense"
+
+    def test_request_accepts_is_instrumental(self):
+        req = DirectorBridge.Request(
+            scene_id="scene_004",
+            mood="calm",
+            duration_seconds=60.0,
+            is_instrumental=True,
+        )
+        assert req.is_instrumental is True
+
+    def test_response_includes_success_field(self):
+        resp = DirectorBridge.Response(
+            audio_path="/tmp/test.wav",
+            duration_seconds=30.0,
+            scene_id="scene_001",
+            success=True,
+        )
+        assert resp.success is True
+
+    def test_response_includes_error_field(self):
+        resp = DirectorBridge.Response(
+            audio_path="",
+            duration_seconds=0.0,
+            scene_id="scene_001",
+            success=False,
+            error="Generation failed: GPU out of memory",
+        )
+        assert resp.success is False
+        assert resp.error == "Generation failed: GPU out of memory"
+
+    def test_request_to_pipeline_maps_new_fields(self):
+        from ace_music.bridge.director_bridge import request_to_pipeline_input
+
+        req = DirectorBridge.Request(
+            scene_id="scene_005",
+            mood="dark",
+            duration_seconds=30.0,
+            preset_name="dark_suspense",
+            is_instrumental=True,
+            scene_description="Night cityscape with rain",
+        )
+        pipeline_input = request_to_pipeline_input(req)
+        assert pipeline_input.preset_name == "dark_suspense"
+        assert pipeline_input.is_instrumental is True
+        assert "rain" in pipeline_input.description

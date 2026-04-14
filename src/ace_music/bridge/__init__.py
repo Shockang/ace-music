@@ -29,6 +29,19 @@ class DirectorBridge(BaseModel):
         tempo_preference: str | None = Field(default=None, description="Tempo preference")
         output_format: str = Field(default="wav")
         seed: int | None = Field(default=None, description="Reproducibility seed")
+        scene_description: str | None = Field(
+            default=None, description="Full scene description for context-aware music generation"
+        )
+        intensity: float | None = Field(
+            default=None, ge=0.0, le=1.0,
+            description="Emotional intensity (0.0=subtle, 1.0=extreme)",
+        )
+        preset_name: str | None = Field(
+            default=None, description="Style preset name to use (e.g. 'dark_suspense')"
+        )
+        is_instrumental: bool = Field(
+            default=False, description="Generate instrumental (no vocals)"
+        )
 
     class Response(BaseModel):
         """ace-music -> auto-director: generated audio result."""
@@ -41,3 +54,7 @@ class DirectorBridge(BaseModel):
             description="BPM, key, style tags, and other generation metadata",
         )
         scene_id: str = Field(description="Echo of the requesting scene ID")
+        success: bool = Field(default=True, description="Whether generation succeeded")
+        error: str | None = Field(
+            default=None, description="Error message if generation failed"
+        )

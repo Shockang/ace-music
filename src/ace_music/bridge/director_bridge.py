@@ -10,14 +10,27 @@ from ace_music.schemas.pipeline import PipelineInput, PipelineOutput
 
 def request_to_pipeline_input(req: DirectorBridge.Request) -> PipelineInput:
     """Convert a DirectorBridge.Request to PipelineInput."""
+    description_parts: list[str] = []
+    if req.style_reference:
+        description_parts.append(req.style_reference)
+    elif req.scene_description:
+        description_parts.append(req.scene_description)
+    else:
+        description_parts.append(f"{req.mood} background music")
+
+    if req.scene_description and req.style_reference:
+        description_parts.append(req.scene_description)
+
     return PipelineInput(
-        description=req.style_reference or f"{req.mood} background music",
+        description=" ".join(description_parts),
         lyrics=req.lyrics_hint,
         duration_seconds=req.duration_seconds,
         mood=req.mood,
         tempo_preference=req.tempo_preference,
         output_format=req.output_format,
         seed=req.seed,
+        preset_name=req.preset_name,
+        is_instrumental=req.is_instrumental,
     )
 
 
@@ -31,4 +44,5 @@ def pipeline_output_to_response(
         format=output.format,
         metadata=output.metadata,
         scene_id=req.scene_id,
+        success=True,
     )
