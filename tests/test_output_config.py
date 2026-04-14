@@ -22,7 +22,9 @@ class TestOutputConfigDefaults:
         assert config.naming == "flat"
 
     def test_invalid_naming_rejected(self):
-        with pytest.raises(Exception):
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
             OutputConfig(naming="invalid")
 
 

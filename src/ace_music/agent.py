@@ -53,6 +53,7 @@ class MusicAgent:
         self._post_processor = PostProcessor()
         self._output_worker = OutputWorker()
         self._preset_resolver = preset_resolver or PresetResolver()
+        # TODO: Wire FeatureRouter into lyrics_planner/style_planner for LLM-assisted planning
         self._feature_router = feature_router
 
     def _build_plan(self, input_data: PipelineInput) -> list[str]:
@@ -373,6 +374,8 @@ class MusicAgent:
         # Stage 5: Output
         if "output" in remaining and processed:
             try:
+                # NOTE: Resume does not restore output_config from the manifest;
+                # resumed runs always use workspace-stage output dirs.
                 out_input = OutputInput(
                     audio=processed,
                     style=style_output or StyleOutput(prompt=input_data.description),

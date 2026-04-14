@@ -21,6 +21,8 @@ def request_to_pipeline_input(req: DirectorBridge.Request) -> PipelineInput:
     if req.scene_description and req.style_reference:
         description_parts.append(req.scene_description)
 
+    # NOTE: req.intensity is accepted but not yet mapped — future work to
+    # scale style parameters (e.g., guidance_scale) based on intensity level.
     return PipelineInput(
         description=" ".join(description_parts),
         lyrics=req.lyrics_hint,

@@ -33,7 +33,10 @@ class OutputResult(BaseModel):
     """Final output with metadata file."""
 
     audio_path: str
-    metadata_path: str | None = None
+    metadata_path: str | None = Field(
+        default=None,
+        description="Path to sidecar metadata JSON; None when create_metadata=False",
+    )
     duration_seconds: float
     format: str
     sample_rate: int
@@ -73,34 +76,35 @@ class OutputWorker(MusicTool[OutputInput, OutputResult]):
         return text[:50].strip("_") or "untitled"
 
     def _next_flat_path(self, base_dir: Path, slug: str, ext: str, template: str) -> Path:
-        """Generate next flat filename with auto-incremented sequence."""
+        """Generate next flat filename with auto-incremented sequence.
+
+        Falls back to a UUID suffix if the candidate filename already exists
+        (handles concurrent generation producing the same sequence number).
+        """
+        import uuid
+
         date = time.strftime("%Y%m%d")
         existing = list(base_dir.glob(f"{slug}_{date}_*.{ext}"))
         seq = len(existing) + 1
         stem = template.format(slug=slug, date=date, seq=seq)
-        return base_dir / f"{stem}.{ext}"
+        candidate = base_dir / f"{stem}.{ext}"
+        if candidate.exists():
+            stem = f"{stem}_{uuid.uuid4().hex[:6]}"
+            candidate = base_dir / f"{stem}.{ext}"
+        return candidate
 
     async def execute(self, input_data: OutputInput) -> OutputResult:
         config = input_data.output_config
         src = Path(input_data.audio.file_path)
+        base_dir = Path(config.base_dir) if config else Path(input_data.output_dir)
 
-        if config:
-            base_dir = Path(config.base_dir)
+        if config and config.naming == "flat":
             base_dir.mkdir(parents=True, exist_ok=True)
-
-            if config.naming == "flat":
-                slug = self._slugify(input_data.style.prompt)
-                dest = self._next_flat_path(
-                    base_dir, slug, src.suffix.lstrip("."), config.filename_template
-                )
-            else:
-                style_slug = self._slugify(input_data.style.prompt)
-                timestamp = time.strftime("%Y%m%d_%H%M%S")
-                out_dir = base_dir / style_slug / timestamp
-                out_dir.mkdir(parents=True, exist_ok=True)
-                dest = out_dir / src.name
+            slug = self._slugify(input_data.style.prompt)
+            dest = self._next_flat_path(
+                base_dir, slug, src.suffix.lstrip("."), config.filename_template
+            )
         else:
-            base_dir = Path(input_data.output_dir)
             style_slug = self._slugify(input_data.style.prompt)
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             out_dir = base_dir / style_slug / timestamp
