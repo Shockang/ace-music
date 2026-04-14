@@ -19,6 +19,7 @@ from ace_music.tools.generator import ACEStepGenerator, GeneratorConfig, Generat
 from ace_music.tools.lyrics_planner import LyricsPlanner
 from ace_music.tools.output import OutputInput, OutputWorker
 from ace_music.tools.post_processor import PostProcessInput, PostProcessor
+from ace_music.tools.preset_resolver import PresetResolver
 from ace_music.tools.style_planner import StylePlanner
 
 logger = logging.getLogger(__name__)
@@ -38,12 +39,14 @@ class MusicAgent:
     def __init__(
         self,
         generator_config: GeneratorConfig | None = None,
+        preset_resolver: PresetResolver | None = None,
     ) -> None:
         self._lyrics_planner = LyricsPlanner()
         self._style_planner = StylePlanner()
         self._generator = ACEStepGenerator(generator_config)
         self._post_processor = PostProcessor()
         self._output_worker = OutputWorker()
+        self._preset_resolver = preset_resolver or PresetResolver()
 
     def _build_plan(self, input_data: PipelineInput) -> list[str]:
         """Build execution plan from input. Returns list of tool names to execute."""
@@ -100,13 +103,23 @@ class MusicAgent:
         # Stage 2: Style planning
         from ace_music.schemas.style import StyleInput
 
+        # Resolve preset if specified
+        preset = None
+        if input_data.preset_name:
+            match = await self._preset_resolver.resolve(input_data.preset_name)
+            if match:
+                preset = match.preset
+                logger.info("Resolved preset: %s (confidence=%.2f)", preset.id, match.confidence)
+            else:
+                logger.warning("Preset '%s' not found, using heuristic style", input_data.preset_name)
+
         style_input = StyleInput(
             description=input_data.description,
             reference_tags=input_data.style_tags,
             tempo_preference=input_data.tempo_preference,
             mood=input_data.mood,
         )
-        style_output = await self._style_planner.execute(style_input)
+        style_output = await self._style_planner.execute(style_input, preset=preset)
 
         # Apply user overrides
         if input_data.guidance_scale is not None:

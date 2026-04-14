@@ -27,6 +27,9 @@ class PipelineInput(BaseModel):
     # Style overrides
     tempo_preference: str | None = None
     mood: str | None = None
+    preset_name: str | None = Field(
+        default=None, description="Name of style preset to use (overrides heuristic style)"
+    )
     guidance_scale: float | None = None
     infer_step: int | None = None
 

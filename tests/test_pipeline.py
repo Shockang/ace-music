@@ -1,6 +1,7 @@
 """Tests for the full pipeline (MusicAgent)."""
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -9,12 +10,15 @@ from ace_music.bridge import DirectorBridge
 from ace_music.bridge.director_bridge import pipeline_output_to_response, request_to_pipeline_input
 from ace_music.schemas.pipeline import PipelineInput, PipelineOutput
 from ace_music.tools.generator import GeneratorConfig
+from ace_music.tools.preset_resolver import PresetResolver
 
 
 @pytest.fixture
 def agent():
     config = GeneratorConfig(mock_mode=True)
-    return MusicAgent(generator_config=config)
+    presets_dir = str(Path(__file__).parent.parent / "configs" / "presets")
+    resolver = PresetResolver(presets_dir=presets_dir)
+    return MusicAgent(generator_config=config, preset_resolver=resolver)
 
 
 class TestMusicAgentPipeline:
@@ -170,3 +174,36 @@ class TestBuildPlan:
         )
         plan = agent._build_plan(inp)
         assert "lyrics_planner" in plan
+
+
+class TestPipelineWithPreset:
+    @pytest.mark.asyncio
+    async def test_pipeline_with_preset_name(self, agent, tmp_path):
+        """Pipeline should accept preset_name and apply preset parameters."""
+        result = await agent.run(
+            PipelineInput(
+                description="some music",
+                preset_name="ambient_chill",
+                duration_seconds=5.0,
+                seed=42,
+                output_dir=str(tmp_path),
+            )
+        )
+        assert isinstance(result, PipelineOutput)
+        assert result.audio_path
+        assert result.metadata.get("style") is not None
+
+    @pytest.mark.asyncio
+    async def test_pipeline_with_unknown_preset_falls_back(self, agent, tmp_path):
+        """Unknown preset name should fall back to heuristic style planning."""
+        result = await agent.run(
+            PipelineInput(
+                description="electronic music",
+                preset_name="nonexistent_preset_xyz",
+                duration_seconds=5.0,
+                seed=42,
+                output_dir=str(tmp_path),
+            )
+        )
+        assert isinstance(result, PipelineOutput)
+        assert result.audio_path
