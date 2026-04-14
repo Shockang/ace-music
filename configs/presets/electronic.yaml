@@ -1,0 +1,56 @@
+version: "1.0"
+presets:
+  - id: synthwave_retro
+    name: Retro Synthwave
+    description: 80s-inspired synthwave with retro synths and neon atmosphere
+    prompt: "synthwave, retro, electronic, 80s, neon, analog synth"
+    guidance_scale: 15.0
+    omega_scale: 10.0
+    infer_step: 60
+    tempo_range: [100, 130]
+    genres: ["synthwave", "electronic"]
+    mood: ["dreamy", "energetic"]
+
+  - id: edm_festival
+    name: EDM Festival
+    description: High-energy festival EDM with drops and buildups
+    prompt: "electronic, edm, dance, high energy, bass drop, festival"
+    guidance_scale: 18.0
+    omega_scale: 12.0
+    infer_step: 50
+    tempo_range: [128, 150]
+    genres: ["electronic"]
+    mood: ["energetic", "aggressive"]
+
+  - id: deep_house
+    name: Deep House
+    description: Groovy deep house with warm basslines
+    prompt: "electronic, deep house, groovy, bass, warm, minimal"
+    guidance_scale: 14.0
+    omega_scale: 9.0
+    infer_step: 55
+    tempo_range: [120, 128]
+    genres: ["electronic"]
+    mood: ["calm", "dreamy"]
+
+  - id: techno_driving
+    name: Driving Techno
+    description: Relentless techno with driving rhythms
+    prompt: "electronic, techno, driving, repetitive, dark, industrial"
+    guidance_scale: 16.0
+    omega_scale: 11.0
+    infer_step: 45
+    tempo_range: [130, 150]
+    genres: ["electronic"]
+    mood: ["aggressive", "dark"]
+
+  - id: trance_euphoric
+    name: Euphoric Trance
+    description: Uplifting trance with sweeping pads and euphoric melodies
+    prompt: "electronic, trance, uplifting, euphoric, pads, ethereal"
+    guidance_scale: 15.0
+    omega_scale: 10.0
+    infer_step: 60
+    tempo_range: [130, 145]
+    genres: ["electronic"]
+    mood: ["dreamy", "energetic"]

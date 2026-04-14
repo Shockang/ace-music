@@ -1,0 +1,42 @@
+version: "1.0"
+presets:
+  - id: cinematic_epic
+    name: Epic Cinematic
+    description: Grand cinematic orchestral with powerful percussion
+    prompt: "cinematic, orchestral, epic, grand, percussion, strings, brass"
+    guidance_scale: 15.0
+    omega_scale: 10.0
+    infer_step: 60
+    genres: ["classical"]
+    mood: ["energetic", "dark"]
+
+  - id: cinematic_dark_ambient
+    name: Dark Ambient
+    description: Ominous dark ambient for suspenseful scenes
+    prompt: "ambient, dark, ominous, suspenseful, atmospheric, drone"
+    guidance_scale: 13.0
+    omega_scale: 8.0
+    infer_step: 50
+    genres: ["ambient"]
+    mood: ["dark"]
+
+  - id: cinematic_tender
+    name: Tender Emotional
+    description: Soft emotional piano and strings for tender moments
+    prompt: "cinematic, piano, strings, emotional, tender, gentle"
+    guidance_scale: 12.0
+    omega_scale: 8.0
+    infer_step: 60
+    genres: ["classical"]
+    mood: ["calm"]
+
+  - id: cinematic_action
+    name: Action Chase
+    description: High-intensity action music with driving percussion
+    prompt: "cinematic, action, percussion, driving, intense, fast"
+    guidance_scale: 17.0
+    omega_scale: 12.0
+    infer_step: 45
+    tempo_range: [140, 180]
+    genres: ["classical", "electronic"]
+    mood: ["energetic", "aggressive"]

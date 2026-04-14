@@ -1,0 +1,42 @@
+version: "1.0"
+presets:
+  - id: gufeng_guzheng
+    name: Gu Feng Guzheng
+    description: Traditional Chinese style with guzheng and bamboo flute
+    prompt: "chinese traditional, guzheng, bamboo flute, pentatonic, gufeng"
+    guidance_scale: 13.0
+    omega_scale: 9.0
+    infer_step: 60
+    genres: ["chinese_traditional"]
+    mood: ["calm", "dreamy"]
+
+  - id: gufeng_epic
+    name: Gu Feng Epic
+    description: Epic Chinese style with orchestral and traditional instruments
+    prompt: "chinese traditional, erhu, pipa, orchestral, epic, pentatonic"
+    guidance_scale: 16.0
+    omega_scale: 10.0
+    infer_step: 60
+    genres: ["chinese_traditional"]
+    mood: ["energetic", "dark"]
+
+  - id: chinese_ambient
+    name: Chinese Ambient
+    description: Meditative ambient with Chinese instruments
+    prompt: "chinese traditional, ambient, meditative, guqin, nature, serene"
+    guidance_scale: 11.0
+    omega_scale: 7.0
+    infer_step: 50
+    genres: ["chinese_traditional", "ambient"]
+    mood: ["calm"]
+
+  - id: folk_dance
+    name: Chinese Folk Dance
+    description: Upbeat Chinese folk music for dance and celebration
+    prompt: "chinese traditional, folk, dance, upbeat, suona, percussion, festive"
+    guidance_scale: 15.0
+    omega_scale: 11.0
+    infer_step: 50
+    tempo_range: [110, 140]
+    genres: ["chinese_traditional"]
+    mood: ["energetic", "happy"]

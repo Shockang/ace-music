@@ -1,0 +1,81 @@
+version: "1.0"
+presets:
+  - id: pop_standard
+    name: Pop Standard
+    description: Mainstream pop with catchy melody and balanced production
+    prompt: "pop, catchy, mainstream, melodic"
+    guidance_scale: 15.0
+    omega_scale: 10.0
+    infer_step: 60
+    genres: ["pop"]
+
+  - id: rock_standard
+    name: Rock Standard
+    description: Standard rock with guitars and drums
+    prompt: "rock, guitar, drums, energetic"
+    guidance_scale: 15.0
+    omega_scale: 10.0
+    infer_step: 60
+    genres: ["rock"]
+
+  - id: jazz_smooth
+    name: Smooth Jazz
+    description: Relaxed jazz with smooth improvisation
+    prompt: "jazz, smooth, improvisation, acoustic"
+    guidance_scale: 12.0
+    omega_scale: 8.0
+    infer_step: 60
+    genres: ["jazz"]
+    mood: ["calm", "peaceful"]
+
+  - id: classical_orchestral
+    name: Classical Orchestral
+    description: Full orchestral arrangement
+    prompt: "classical, orchestral, acoustic, grand"
+    guidance_scale: 12.0
+    omega_scale: 8.0
+    infer_step: 60
+    genres: ["classical"]
+
+  - id: ambient_chill
+    name: Ambient Chill
+    description: Relaxed ambient atmosphere for background listening
+    prompt: "ambient, atmospheric, chill, relaxed, serene"
+    guidance_scale: 12.0
+    omega_scale: 8.0
+    infer_step: 40
+    tempo_range: [60, 90]
+    genres: ["ambient"]
+    mood: ["calm", "peaceful"]
+
+  - id: lofi_study
+    name: Lo-Fi Study
+    description: Lo-fi beats for studying and relaxation
+    prompt: "lo-fi, chill, relaxed, warm, nostalgic"
+    guidance_scale: 13.0
+    omega_scale: 9.0
+    infer_step: 45
+    tempo_range: [70, 95]
+    genres: ["lo-fi"]
+    mood: ["calm", "dreamy"]
+
+  - id: hiphop_beats
+    name: Hip-Hop Beats
+    description: Boom bap and trap influenced beats
+    prompt: "hip-hop, rap, beats, bass, rhythm"
+    guidance_scale: 15.0
+    omega_scale: 10.0
+    infer_step: 60
+    tempo_range: [80, 140]
+    genres: ["hip-hop"]
+    mood: ["energetic"]
+
+  - id: rnb_soul
+    name: R&B Soul
+    description: Smooth R&B with soulful vocals
+    prompt: "r&b, soul, rhythm and blues, smooth"
+    guidance_scale: 14.0
+    omega_scale: 9.0
+    infer_step: 55
+    genres: ["r&b"]
+    mood: ["calm", "dreamy"]
