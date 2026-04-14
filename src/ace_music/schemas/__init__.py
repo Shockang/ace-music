@@ -2,6 +2,7 @@
 
 from .audio import AudioOutput, ProcessedAudio
 from .lyrics import LyricSegment, LyricsInput, LyricsOutput, SegmentType
+from .output_config import OutputConfig
 from .pipeline import PipelineInput, PipelineOutput
 from .preset import PresetFile, PresetStyleOverrides, StylePreset
 from .repair import PIPELINE_STAGES, ArtifactRecord, ArtifactStatus, RepairTicket, RunManifest
@@ -16,6 +17,7 @@ __all__ = [
     "LyricsOutput",
     "PIPELINE_STAGES",
     "PipelineInput",
+    "OutputConfig",
     "PipelineOutput",
     "PresetFile",
     "PresetStyleOverrides",
