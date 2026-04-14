@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 import time
 from pathlib import Path
 
@@ -59,20 +60,29 @@ class OutputWorker(MusicTool[OutputInput, OutputResult]):
     def is_read_only(self) -> bool:
         return False
 
+    def _slugify(self, text: str) -> str:
+        """Convert text to a filesystem-safe slug."""
+        text = text.lower().strip()
+        # Take first tag if comma-separated
+        text = text.split(",")[0].strip() if "," in text else text
+        text = re.sub(r"[^\w\s-]", "", text)
+        text = re.sub(r"[\s_]+", "_", text)
+        return text[:50].strip("_") or "untitled"
+
     async def execute(self, input_data: OutputInput) -> OutputResult:
-        out_dir = Path(input_data.output_dir)
+        base_dir = Path(input_data.output_dir)
+        style_slug = self._slugify(input_data.style.prompt)
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        out_dir = base_dir / style_slug / timestamp
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        # Ensure audio file is in output dir
+        # Copy audio file into structured directory
         src = Path(input_data.audio.file_path)
-        if src.parent != out_dir:
+        dest = out_dir / src.name
+        if src.resolve() != dest.resolve():
             import shutil
-
-            dest = out_dir / src.name
             shutil.copy2(str(src), str(dest))
-            final_path = str(dest)
-        else:
-            final_path = str(src)
+        final_path = str(dest)
 
         # Build metadata
         metadata = {
@@ -98,16 +108,14 @@ class OutputWorker(MusicTool[OutputInput, OutputResult]):
         }
 
         # Write metadata JSON
-        metadata_path: str | None = None
         meta_file = out_dir / f"{src.stem}_metadata.json"
         meta_file.write_text(json.dumps(metadata, indent=2, ensure_ascii=False))
-        metadata_path = str(meta_file)
 
         logger.info("Output written: %s", final_path)
 
         return OutputResult(
             audio_path=final_path,
-            metadata_path=metadata_path,
+            metadata_path=str(meta_file),
             duration_seconds=input_data.audio.duration_seconds,
             format=input_data.audio.format,
             sample_rate=input_data.audio.sample_rate,
