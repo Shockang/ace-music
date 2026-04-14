@@ -70,3 +70,63 @@ class TestDeepSeekProvider:
             os.environ.pop("DEEPSEEK_API_KEY", None)
             with pytest.raises(ValueError, match="api_key"):
                 DeepSeekProvider()
+
+
+from ace_music.providers.router import FeatureRouter
+
+
+class FakeProviderA:
+    @property
+    def name(self) -> str:
+        return "provider_a"
+
+    async def complete(self, messages: list[ChatMessage], **kwargs):
+        return ChatResponse(content="response from A", model="a-model")
+
+
+class FakeProviderB:
+    @property
+    def name(self) -> str:
+        return "provider_b"
+
+    async def complete(self, messages: list[ChatMessage], **kwargs):
+        return ChatResponse(content="response from B", model="b-model")
+
+
+class TestFeatureRouter:
+    def test_default_provider(self):
+        router = FeatureRouter(default=FakeProviderA())
+        assert router.default_provider.name == "provider_a"
+
+    @pytest.mark.asyncio
+    async def test_route_to_default(self):
+        router = FeatureRouter(default=FakeProviderA())
+        response = await router.complete("lyrics_planning", [ChatMessage(role="user", content="test")])
+        assert response.content == "response from A"
+
+    @pytest.mark.asyncio
+    async def test_route_to_feature_specific_provider(self):
+        router = FeatureRouter(
+            default=FakeProviderA(),
+            feature_providers={"style_planning": FakeProviderB()},
+        )
+        response = await router.complete("style_planning", [ChatMessage(role="user", content="test")])
+        assert response.content == "response from B"
+
+    @pytest.mark.asyncio
+    async def test_unknown_feature_uses_default(self):
+        router = FeatureRouter(
+            default=FakeProviderA(),
+            feature_providers={"style_planning": FakeProviderB()},
+        )
+        response = await router.complete("unknown_feature", [ChatMessage(role="user", content="test")])
+        assert response.content == "response from A"
+
+    def test_list_providers(self):
+        router = FeatureRouter(
+            default=FakeProviderA(),
+            feature_providers={"style_planning": FakeProviderB()},
+        )
+        providers = router.list_providers()
+        assert "provider_a" in providers
+        assert "provider_b" in providers
