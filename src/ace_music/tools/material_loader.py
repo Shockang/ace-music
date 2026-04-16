@@ -53,16 +53,17 @@ class MaterialLoader:
         return MaterialContext(entries=entries)
 
     def load_file(self, filename: str) -> MaterialContext:
-        """Load a specific material file by name or path."""
+        """Load a specific material file by name or path.
+
+        Resolves relative filenames against the loader's directory.
+        Absolute paths are used as-is.
+        """
         path = Path(filename)
         if not path.is_absolute():
             path = self._directory / filename
 
         if not path.exists():
-            path = Path(filename)
-
-        if not path.exists():
-            logger.warning("Material file not found: %s", filename)
+            logger.warning("Material file not found: %s", path)
             return MaterialContext()
 
         entries = self._parse_file(path)

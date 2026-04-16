@@ -20,9 +20,6 @@ class ValidationResult(BaseModel):
     file_size_bytes: int = 0
     errors: list[str] = Field(default_factory=list)
 
-    def to_dict(self) -> dict:
-        return self.model_dump()
-
 
 class AudioValidator:
     """Validate WAV audio files against required specifications."""
@@ -48,7 +45,6 @@ class AudioValidator:
         try:
             with wave.open(str(path), "r") as wf:
                 channels = wf.getnchannels()
-                sample_width = wf.getsampwidth()
                 sample_rate = wf.getframerate()
                 num_frames = wf.getnframes()
                 duration = num_frames / sample_rate if sample_rate > 0 else 0.0

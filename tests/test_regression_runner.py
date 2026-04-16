@@ -140,6 +140,6 @@ class TestRegressionResult:
             elapsed_seconds=10.0,
             description="test",
         )
-        d = result.to_dict()
+        d = result.model_dump()
         assert d["run_number"] == 1
         assert d["success"] is True

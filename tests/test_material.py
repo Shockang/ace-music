@@ -129,6 +129,9 @@ from pathlib import Path
 from ace_music.tools.material_loader import MaterialLoader
 
 
+FIXTURE_DIR = Path(__file__).resolve().parent.parent
+
+
 class TestMaterialLoader:
     def _write_material_file(self, tmp_path, filename, data):
         materials_dir = tmp_path / "materials"
@@ -169,7 +172,7 @@ class TestMaterialLoader:
         assert ctx.is_empty is True
 
     def test_load_from_sample_fixture(self):
-        loader = MaterialLoader(directory=".")
+        loader = MaterialLoader(directory=str(FIXTURE_DIR))
         ctx = loader.load_file("sample-music-material.json")
         assert len(ctx.entries) == 4
         assert ctx.entries[0].category == "style_inspiration"

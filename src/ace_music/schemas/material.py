@@ -30,8 +30,10 @@ class MaterialContext(BaseModel):
 
     @property
     def style_summary(self) -> str:
-        entries = self.entries_by_category("style") + self.entries_by_category(
-            "style_inspiration"
+        entries = (
+            self.entries_by_category("style")
+            + self.entries_by_category("style_inspiration")
+            + self.entries_by_category("genre")
         )
         return " ".join(e.content for e in entries)
 

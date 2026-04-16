@@ -32,9 +32,6 @@ class RegressionResult(BaseModel):
     validation_errors: list[str] = Field(default_factory=list)
     error_message: str | None = None
 
-    def to_dict(self) -> dict:
-        return self.model_dump()
-
 
 class RegressionRunner:
     """Run multiple pipeline generations for regression testing."""
@@ -47,6 +44,7 @@ class RegressionRunner:
         self._config = generator_config or GeneratorConfig(mock_mode=True)
         self._output_dir = output_dir
         self._validator = AudioValidator()
+        self._agent = MusicAgent(generator_config=self._config)
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     async def run_single(
@@ -68,8 +66,7 @@ class RegressionRunner:
         )
 
         try:
-            agent = MusicAgent(generator_config=self._config)
-            result = await agent.run(
+            result = await self._agent.run(
                 PipelineInput(
                     description=description,
                     material_context=material,
@@ -154,7 +151,7 @@ class RegressionRunner:
                 "failed_runs": len(results) - len(successful),
                 "all_passed": len(successful) == len(results),
             },
-            "runs": [r.to_dict() for r in results],
+            "runs": [r.model_dump() for r in results],
         }
 
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)

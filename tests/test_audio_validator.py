@@ -82,7 +82,7 @@ class TestAudioValidator:
 
     def test_validation_result_dict(self, validator, valid_wav):
         result = validator.validate(valid_wav)
-        d = result.to_dict()
+        d = result.model_dump()
         assert d["is_valid"] is True
         assert "file_path" in d
         assert "duration_seconds" in d
