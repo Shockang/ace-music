@@ -1,5 +1,7 @@
 """Integration tests: material flows through pipeline and appears in output."""
 
+import logging
+
 import pytest
 
 from ace_music.agent import MusicAgent
@@ -132,19 +134,25 @@ class TestMaterialInfluencesOutput:
 
 class TestFailureGuards:
     @pytest.mark.asyncio
-    async def test_explicit_log_when_material_empty(self, agent, tmp_path):
+    async def test_explicit_log_when_material_empty(self, agent, tmp_path, caplog):
         """When material is provided but empty, pipeline should log a warning."""
         empty_material = MaterialContext(entries=[])
-        result = await agent.run(
-            PipelineInput(
-                description="test",
-                material_context=empty_material,
-                duration_seconds=5.0,
-                seed=42,
-                output_dir=str(tmp_path),
+        with caplog.at_level(logging.WARNING, logger="ace_music.agent"):
+            result = await agent.run(
+                PipelineInput(
+                    description="test",
+                    material_context=empty_material,
+                    duration_seconds=5.0,
+                    seed=42,
+                    output_dir=str(tmp_path),
+                )
             )
-        )
         # Should still succeed (empty material is valid)
         assert isinstance(result, PipelineOutput)
         # But material provenance should be None (empty context is treated as no material)
         assert result.metadata.get("material") is None
+        # And a warning should have been logged
+        assert any(
+            "0 entries" in r.message and "material" in r.message.lower()
+            for r in caplog.records
+        ), f"Expected warning about empty material, got: {[r.message for r in caplog.records]}"

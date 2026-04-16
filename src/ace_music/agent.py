@@ -118,6 +118,10 @@ class MusicAgent:
                 len(material.entries),
                 material.source_files,
             )
+        elif material and material.is_empty:
+            logger.warning(
+                "Material context provided but contains 0 entries — treating as no material"
+            )
 
         if workspace and run_id and not workspace.manifest_exists(run_id):
             workspace.create_run(run_id, description=input_data.description, seed=seed)
