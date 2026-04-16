@@ -109,10 +109,12 @@ class MusicAgent:
 
         if material and not material.is_empty:
             material_description = material.style_summary
-            material_mood = material._collect_moods()[0] if material._collect_moods() else None
+            material_mood = material.first_mood
             material_lyrics = material.lyrics_summary or None
             for entry in material.entries:
-                material_style_tags.extend(entry.tags)
+                for tag in entry.tags:
+                    if tag not in material_style_tags:
+                        material_style_tags.append(tag)
             logger.info(
                 "Material consumed: %d entries from %s",
                 len(material.entries),

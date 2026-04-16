@@ -44,6 +44,12 @@ class MaterialContext(BaseModel):
     def source_files(self) -> list[str]:
         return [e.source_file for e in self.entries]
 
+    @property
+    def first_mood(self) -> str | None:
+        """Return the first mood found in entries, or None."""
+        moods = self._collect_moods()
+        return moods[0] if moods else None
+
     def to_provenance_dict(self) -> dict:
         return {
             "source_count": len(self.entries),

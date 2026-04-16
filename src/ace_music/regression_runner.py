@@ -61,6 +61,11 @@ class RegressionRunner:
 
         actual_seed = seed if seed is not None else random.randint(0, 2**32 - 1)
         start_time = time.time()
+        provenance = (
+            material.to_provenance_dict()
+            if material and not material.is_empty
+            else None
+        )
 
         try:
             agent = MusicAgent(generator_config=self._config)
@@ -87,9 +92,7 @@ class RegressionRunner:
                 seed=actual_seed,
                 elapsed_seconds=round(elapsed, 2),
                 description=description,
-                material_provenance=material.to_provenance_dict()
-                if material and not material.is_empty
-                else None,
+                material_provenance=provenance,
                 validation_errors=validation.errors,
             )
 
@@ -102,9 +105,7 @@ class RegressionRunner:
                 seed=actual_seed,
                 elapsed_seconds=round(elapsed, 2),
                 description=description,
-                material_provenance=material.to_provenance_dict()
-                if material and not material.is_empty
-                else None,
+                material_provenance=provenance,
                 error_message=str(e),
             )
 
