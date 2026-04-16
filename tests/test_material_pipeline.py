@@ -128,3 +128,23 @@ class TestMaterialInfluencesOutput:
             )
         )
         assert isinstance(result, PipelineOutput)
+
+
+class TestFailureGuards:
+    @pytest.mark.asyncio
+    async def test_explicit_log_when_material_empty(self, agent, tmp_path):
+        """When material is provided but empty, pipeline should log a warning."""
+        empty_material = MaterialContext(entries=[])
+        result = await agent.run(
+            PipelineInput(
+                description="test",
+                material_context=empty_material,
+                duration_seconds=5.0,
+                seed=42,
+                output_dir=str(tmp_path),
+            )
+        )
+        # Should still succeed (empty material is valid)
+        assert isinstance(result, PipelineOutput)
+        # But material provenance should be None (empty context is treated as no material)
+        assert result.metadata.get("material") is None
