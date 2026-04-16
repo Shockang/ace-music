@@ -121,3 +121,69 @@ class TestMaterialSource:
     def test_material_source_with_path(self):
         source = MaterialSource(directory="/path/to/materials")
         assert source.directory == "/path/to/materials"
+
+
+import json
+from pathlib import Path
+
+from ace_music.tools.material_loader import MaterialLoader
+
+
+class TestMaterialLoader:
+    def _write_material_file(self, tmp_path, filename, data):
+        materials_dir = tmp_path / "materials"
+        materials_dir.mkdir(exist_ok=True)
+        (materials_dir / filename).write_text(json.dumps(data, ensure_ascii=False))
+        return str(materials_dir)
+
+    def test_load_from_json_file(self, tmp_path):
+        data = {
+            "date": "2026-04-16",
+            "entries": [
+                {"category": "style", "content": "ambient electronic", "tags": ["ambient"], "mood": "calm", "style": "ambient"}
+            ],
+        }
+        mat_dir = self._write_material_file(tmp_path, "material_2026-04-16.json", data)
+        loader = MaterialLoader(directory=mat_dir)
+        ctx = loader.load()
+        assert len(ctx.entries) == 1
+        assert ctx.entries[0].source_file == "material_2026-04-16.json"
+        assert ctx.entries[0].content == "ambient electronic"
+        assert ctx.entries[0].mood == "calm"
+
+    def test_load_latest_only(self, tmp_path):
+        old_data = {"date": "2026-04-15", "entries": [{"category": "style", "content": "old style"}]}
+        new_data = {"date": "2026-04-16", "entries": [{"category": "style", "content": "new style"}]}
+        mat_dir = self._write_material_file(tmp_path, "material_2026-04-15.json", old_data)
+        self._write_material_file(tmp_path, "material_2026-04-16.json", new_data)
+        loader = MaterialLoader(directory=mat_dir)
+        ctx = loader.load_latest()
+        assert len(ctx.entries) == 1
+        assert ctx.entries[0].content == "new style"
+
+    def test_empty_directory_returns_empty_context(self, tmp_path):
+        mat_dir = tmp_path / "empty_materials"
+        mat_dir.mkdir()
+        loader = MaterialLoader(directory=str(mat_dir))
+        ctx = loader.load()
+        assert ctx.is_empty is True
+
+    def test_load_from_sample_fixture(self):
+        loader = MaterialLoader(directory=".")
+        ctx = loader.load_file("sample-music-material.json")
+        assert len(ctx.entries) == 4
+        assert ctx.entries[0].category == "style_inspiration"
+        assert ctx.style_summary != ""
+        assert ctx.lyrics_summary != ""
+
+    def test_nonexistent_directory_returns_empty(self):
+        loader = MaterialLoader(directory="/nonexistent/path")
+        ctx = loader.load()
+        assert ctx.is_empty is True
+
+    def test_load_preserves_source_file(self, tmp_path):
+        data = {"entries": [{"category": "mood", "content": "happy"}]}
+        mat_dir = self._write_material_file(tmp_path, "test_mat.json", data)
+        loader = MaterialLoader(directory=mat_dir)
+        ctx = loader.load()
+        assert ctx.entries[0].source_file == "test_mat.json"
