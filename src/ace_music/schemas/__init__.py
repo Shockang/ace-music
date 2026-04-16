@@ -6,6 +6,7 @@ from .output_config import OutputConfig
 from .pipeline import PipelineInput, PipelineOutput
 from .preset import PresetFile, PresetStyleOverrides, StylePreset
 from .repair import PIPELINE_STAGES, ArtifactRecord, ArtifactStatus, RepairTicket, RunManifest
+from .material import MaterialContext, MaterialEntry, MaterialSource
 from .style import StyleInput, StyleOutput
 
 __all__ = [
@@ -15,6 +16,9 @@ __all__ = [
     "LyricSegment",
     "LyricsInput",
     "LyricsOutput",
+    "MaterialContext",
+    "MaterialEntry",
+    "MaterialSource",
     "PIPELINE_STAGES",
     "PipelineInput",
     "OutputConfig",
