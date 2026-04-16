@@ -27,6 +27,10 @@ class OutputInput(BaseModel):
     description: str = ""
     output_dir: str = "./output"
     output_config: OutputConfig | None = None
+    material_provenance: dict | None = Field(
+        default=None,
+        description="Material provenance dict from MaterialContext.to_provenance_dict()",
+    )
 
 
 class OutputResult(BaseModel):
@@ -138,6 +142,7 @@ class OutputWorker(MusicTool[OutputInput, OutputResult]):
             },
             "seed": input_data.seed,
             "lyrics": input_data.lyrics_text if input_data.lyrics_text else None,
+            "material": input_data.material_provenance,
         }
 
         # Write metadata JSON

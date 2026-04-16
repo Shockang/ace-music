@@ -100,6 +100,25 @@ class MusicAgent:
             0, 2**32 - 1
         )
 
+        # Extract material context for pipeline enrichment
+        material = input_data.material_context
+        material_description = ""
+        material_mood = None
+        material_lyrics = None
+        material_style_tags: list[str] = []
+
+        if material and not material.is_empty:
+            material_description = material.style_summary
+            material_mood = material._collect_moods()[0] if material._collect_moods() else None
+            material_lyrics = material.lyrics_summary or None
+            for entry in material.entries:
+                material_style_tags.extend(entry.tags)
+            logger.info(
+                "Material consumed: %d entries from %s",
+                len(material.entries),
+                material.source_files,
+            )
+
         if workspace and run_id and not workspace.manifest_exists(run_id):
             workspace.create_run(run_id, description=input_data.description, seed=seed)
 
@@ -109,7 +128,7 @@ class MusicAgent:
             from ace_music.schemas.lyrics import LyricsInput
 
             lyrics_input = LyricsInput(
-                raw_text=input_data.lyrics or input_data.description,
+                raw_text=material_lyrics or input_data.lyrics or input_data.description,
                 language=input_data.language,
                 is_instrumental=input_data.is_instrumental,
             )
@@ -139,10 +158,10 @@ class MusicAgent:
                 )
 
         style_input = StyleInput(
-            description=input_data.description,
-            reference_tags=input_data.style_tags,
+            description=material_description or input_data.description,
+            reference_tags=input_data.style_tags + material_style_tags,
             tempo_preference=input_data.tempo_preference,
-            mood=input_data.mood,
+            mood=material_mood or input_data.mood,
         )
         style_output = await self._style_planner.execute(style_input, preset=preset)
 
@@ -201,6 +220,7 @@ class MusicAgent:
             description=input_data.description,
             output_dir=input_data.output_dir,
             output_config=input_data.output_config,
+            material_provenance=material.to_provenance_dict() if material and not material.is_empty else None,
         )
         result = await self._output_worker.execute(out_input)
         logger.info("Output: %s", result.audio_path)

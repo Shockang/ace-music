@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel, Field
 
+from ace_music.schemas.material import MaterialContext
 from ace_music.schemas.output_config import OutputConfig
 
 
@@ -36,6 +37,10 @@ class PipelineInput(BaseModel):
     infer_step: int | None = None
     output_config: OutputConfig | None = Field(
         default=None, description="Output configuration (naming, path, metadata)"
+    )
+    material_context: MaterialContext | None = Field(
+        default=None,
+        description="Daily material context (inspiration, lyrics, style) driving this generation",
     )
 
 
