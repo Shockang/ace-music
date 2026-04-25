@@ -9,7 +9,6 @@ import pytest
 from pydantic import ValidationError
 
 from ace_music.errors import GenerationFailedError
-
 from ace_music.schemas.audio import AudioOutput
 from ace_music.tools.minimax_generator import (
     MiniMaxMusicConfig,
