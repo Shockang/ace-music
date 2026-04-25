@@ -28,6 +28,7 @@ from ace_music.tools.audio_validator import AudioValidator
 from ace_music.tools.emotion_mapper import map_scene_contract
 from ace_music.tools.generator import ACEStepGenerator, GenerationInput, GeneratorConfig
 from ace_music.tools.lyrics_planner import LyricsPlanner
+from ace_music.tools.minimax_generator import MiniMaxMusicGenerator
 from ace_music.tools.output import OutputInput, OutputWorker
 from ace_music.tools.post_processor import PostProcessInput, PostProcessor
 from ace_music.tools.preset_resolver import PresetResolver
@@ -58,6 +59,7 @@ class MusicAgent:
         self._lyrics_planner = LyricsPlanner()
         self._style_planner = StylePlanner()
         self._generator = ACEStepGenerator(generator_config)
+        self._minimax_generator: MiniMaxMusicGenerator | None = None
         self._post_processor = PostProcessor()
         self._output_worker = OutputWorker()
         self._audio_validator = AudioValidator()
@@ -67,22 +69,25 @@ class MusicAgent:
 
     def _build_plan(self, input_data: PipelineInput) -> list[str]:
         """Build execution plan from input. Returns list of tool names to execute."""
+        if input_data.backend == "minimax":
+            return ["minimax_generator", "output"]
+
         plan = []
 
         # Step 1: Lyrics planning (skip if instrumental)
         if not input_data.is_instrumental and (input_data.lyrics or input_data.description):
             plan.append("lyrics_planner")
 
-        # Step 2: Style planning (always needed)
+        # Step 2: Style planning (always needed for ACEStep)
         plan.append("style_planner")
 
-        # Step 3: Generation (always needed)
+        # Step 3: Generation
         plan.append("generator")
 
-        # Step 4: Post-processing (always needed)
+        # Step 4: Post-processing
         plan.append("post_processor")
 
-        # Step 5: Output (always needed)
+        # Step 5: Output
         plan.append("output")
 
         return plan
@@ -131,6 +136,103 @@ class MusicAgent:
         logger.info("Stage complete: %s (%.2fs)", stage, time.monotonic() - started_at)
         return result
 
+    async def _run_minimax_pipeline(
+        self,
+        input_data: PipelineInput,
+        workspace: WorkspaceManager | None,
+        run_id: str | None,
+    ) -> PipelineOutput:
+        """Simplified pipeline for MiniMax cloud API backend."""
+        from pathlib import Path
+
+        from ace_music.schemas.style import StyleOutput
+        from ace_music.tools.minimax_generator import MiniMaxMusicInput
+
+        pipeline_started_at = time.monotonic()
+        seed = input_data.seed if input_data.seed is not None else random.randint(0, 2**32 - 1)
+        stage_timeout = input_data.stage_timeout_seconds
+
+        if self._minimax_generator is None:
+            self._minimax_generator = MiniMaxMusicGenerator()
+
+        if workspace and run_id and not workspace.manifest_exists(run_id):
+            workspace.create_run(run_id, description=input_data.description, seed=seed)
+
+        Path(input_data.output_dir).mkdir(parents=True, exist_ok=True)
+
+        # Stage 1: MiniMax generation
+        minimax_input = MiniMaxMusicInput(
+            description=input_data.description,
+            mode=input_data.mode,
+            lyrics=input_data.lyrics,
+            ref_audio=input_data.ref_audio,
+            output_dir=input_data.output_dir,
+            seed=seed,
+        )
+        audio_output = await self._run_stage(
+            "minimax_generator",
+            self._minimax_generator.execute(minimax_input),
+            input_data.generation_timeout_seconds or stage_timeout,
+            workspace,
+            run_id,
+        )
+        logger.info(
+            "MiniMax generated: %s (%.1fs)",
+            audio_output.file_path,
+            audio_output.duration_seconds,
+        )
+        if workspace and run_id:
+            workspace.update_artifact(
+                run_id,
+                "minimax_generator",
+                ArtifactStatus.COMPLETED,
+                file_path=audio_output.file_path,
+            )
+
+        # Stage 2: Output (skip post-processing — MiniMax outputs processed MP3)
+        dummy_style = StyleOutput(prompt=input_data.description)
+        out_input = OutputInput(
+            audio=ProcessedAudio(
+                file_path=audio_output.file_path,
+                duration_seconds=audio_output.duration_seconds,
+                sample_rate=audio_output.sample_rate,
+                format=audio_output.format,
+                channels=audio_output.channels,
+            ),
+            style=dummy_style,
+            seed=seed,
+            lyrics_text=input_data.lyrics or "",
+            description=input_data.description,
+            output_dir=input_data.output_dir,
+            output_config=input_data.output_config,
+            extra_metadata={"backend": "minimax", "mode": input_data.mode},
+        )
+        result = await self._run_stage(
+            "output",
+            self._output_worker.execute(out_input),
+            stage_timeout,
+            workspace,
+            run_id,
+        )
+        if workspace and run_id:
+            workspace.update_artifact(
+                run_id,
+                "output",
+                ArtifactStatus.COMPLETED,
+                file_path=result.audio_path,
+            )
+
+        result.metadata["backend"] = "minimax"
+        result.metadata["elapsed_seconds"] = round(time.monotonic() - pipeline_started_at, 2)
+
+        return PipelineOutput(
+            audio_path=result.audio_path,
+            duration_seconds=result.duration_seconds,
+            format=result.format or "mp3",
+            sample_rate=result.sample_rate,
+            metadata=result.metadata,
+        )
+
     async def run(
         self,
         input_data: PipelineInput,
@@ -156,6 +258,10 @@ class MusicAgent:
         )
         contract = input_data.audio_contract
         mapped_audio = map_scene_contract(contract) if contract else None
+
+        # MiniMax backend: simplified pipeline
+        if input_data.backend == "minimax":
+            return await self._run_minimax_pipeline(input_data, workspace, run_id)
 
         # Extract material context for pipeline enrichment
         material = input_data.material_context
