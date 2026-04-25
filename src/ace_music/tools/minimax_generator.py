@@ -10,11 +10,13 @@ import json
 import logging
 import os
 import time
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
 
 import httpx
 from pydantic import BaseModel, Field
 
+from ace_music.errors import GenerationFailedError
 from ace_music.schemas.audio import AudioOutput
 from ace_music.tools.base import MusicTool
 
@@ -27,7 +29,7 @@ class MiniMaxMusicInput(BaseModel):
     """Input for MiniMax music generation."""
 
     description: str = Field(description="Music description/prompt", max_length=2000)
-    mode: str = Field(
+    mode: Literal["instrumental", "lyrics", "cover"] = Field(
         default="instrumental",
         description="Generation mode: instrumental, lyrics, or cover",
     )
@@ -57,22 +59,24 @@ class MiniMaxMusicConfig(BaseModel):
 
 
 class RateLimiter:
-    """Simple sliding-window rate limiter."""
+    """Simple sliding-window rate limiter with async-safe locking."""
 
     def __init__(self, max_calls: int, period_seconds: float) -> None:
         self._max_calls = max_calls
         self._period = period_seconds
         self._timestamps: list[float] = []
+        self._lock = asyncio.Lock()
 
     async def acquire(self) -> None:
-        now = time.monotonic()
-        self._timestamps = [t for t in self._timestamps if now - t < self._period]
-        if len(self._timestamps) >= self._max_calls:
-            wait_time = self._period - (now - self._timestamps[0])
-            if wait_time > 0:
-                logger.info("Rate limit reached, waiting %.1fs", wait_time)
-                await asyncio.sleep(wait_time)
-        self._timestamps.append(time.monotonic())
+        async with self._lock:
+            now = time.monotonic()
+            self._timestamps = [t for t in self._timestamps if now - t < self._period]
+            if len(self._timestamps) >= self._max_calls:
+                wait_time = self._period - (now - self._timestamps[0])
+                if wait_time > 0:
+                    logger.info("Rate limit reached, waiting %.1fs", wait_time)
+                    await asyncio.sleep(wait_time)
+            self._timestamps.append(time.monotonic())
 
 
 class MiniMaxMusicGenerator(MusicTool[MiniMaxMusicInput, AudioOutput]):
@@ -156,15 +160,13 @@ class MiniMaxMusicGenerator(MusicTool[MiniMaxMusicInput, AudioOutput]):
         data = result.get("data", {})
         url = data.get("audio_url")
         if not url:
-            raise RuntimeError(
+            raise GenerationFailedError(
                 f"MiniMax response missing audio_url: {json.dumps(result)[:200]}"
             )
         return url
 
     async def _download_audio(self, url: str, output_dir: str) -> str:
         """Download generated audio from URL to output directory."""
-        from pathlib import Path
-
         out_path = Path(output_dir)
         out_path.mkdir(parents=True, exist_ok=True)
         filename = f"minimax_{int(time.time())}.mp3"
@@ -186,8 +188,12 @@ class MiniMaxMusicGenerator(MusicTool[MiniMaxMusicInput, AudioOutput]):
 
         try:
             result = await self._call_api(payload)
+        except httpx.HTTPStatusError as e:
+            raise GenerationFailedError(
+                f"MiniMax API returned {e.response.status_code}: {e.response.text[:200]}"
+            ) from e
         except Exception as e:
-            raise RuntimeError(f"MiniMax Music API request failed: {e}") from e
+            raise GenerationFailedError(f"MiniMax Music API request failed: {e}") from e
 
         audio_url = self._extract_audio_url(result)
         audio_path = await self._download_audio(audio_url, input_data.output_dir)

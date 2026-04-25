@@ -8,6 +8,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pydantic import ValidationError
 
+from ace_music.errors import GenerationFailedError
+
 from ace_music.schemas.audio import AudioOutput
 from ace_music.tools.minimax_generator import (
     MiniMaxMusicConfig,
@@ -35,7 +37,11 @@ class TestMiniMaxMusicInput:
         assert inp.mode == "lyrics"
         assert inp.lyrics == "[verse]\nHello world"
 
-    def test_cover_mode_requires_ref_audio(self):
+    def test_invalid_mode_raises(self):
+        with pytest.raises(ValidationError):
+            MiniMaxMusicInput(description="test", mode="disco")
+
+    def test_cover_mode_with_ref_audio(self):
         inp = MiniMaxMusicInput(
             description="rock cover",
             mode="cover",
@@ -199,7 +205,7 @@ class TestMiniMaxMusicGenerator:
         with patch.object(gen, "_call_api", new_callable=AsyncMock) as mock_api:
             mock_api.side_effect = RuntimeError("API error")
             inp = MiniMaxMusicInput(description="test", output_dir=str(tmp_path))
-            with pytest.raises(RuntimeError, match="API error"):
+            with pytest.raises(GenerationFailedError, match="API error"):
                 await gen.execute(inp)
 
     @pytest.mark.asyncio
@@ -211,5 +217,5 @@ class TestMiniMaxMusicGenerator:
             gen, "_call_api", new_callable=AsyncMock, return_value={"bad": "data"}
         ):
             inp = MiniMaxMusicInput(description="test", output_dir=str(tmp_path))
-            with pytest.raises(RuntimeError, match="audio_url"):
+            with pytest.raises(GenerationFailedError, match="audio_url"):
                 await gen.execute(inp)
