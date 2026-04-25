@@ -1,6 +1,14 @@
 """Schema models for ace-music pipeline."""
 
 from .audio import AudioOutput, ProcessedAudio
+from .audio_contract import (
+    AudioLayerPolicy,
+    AudioQATargets,
+    AudioSceneContract,
+    AudioSegmentCue,
+    MixPolicy,
+    TransitionPolicy,
+)
 from .lyrics import LyricSegment, LyricsInput, LyricsOutput, SegmentType
 from .material import MaterialContext, MaterialEntry, MaterialSource
 from .output_config import OutputConfig
@@ -10,15 +18,20 @@ from .repair import PIPELINE_STAGES, ArtifactRecord, ArtifactStatus, RepairTicke
 from .style import StyleInput, StyleOutput
 
 __all__ = [
+    "AudioLayerPolicy",
+    "AudioQATargets",
     "ArtifactRecord",
     "ArtifactStatus",
     "AudioOutput",
+    "AudioSceneContract",
+    "AudioSegmentCue",
     "LyricSegment",
     "LyricsInput",
     "LyricsOutput",
     "MaterialContext",
     "MaterialEntry",
     "MaterialSource",
+    "MixPolicy",
     "PIPELINE_STAGES",
     "PipelineInput",
     "OutputConfig",
@@ -32,4 +45,5 @@ __all__ = [
     "StyleInput",
     "StyleOutput",
     "StylePreset",
+    "TransitionPolicy",
 ]

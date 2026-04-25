@@ -5,6 +5,12 @@ PipelineOutput into DirectorBridge.Response.
 """
 
 from ace_music.bridge import DirectorBridge
+from ace_music.schemas.audio_contract import (
+    AudioLayerPolicy,
+    AudioSceneContract,
+    MixPolicy,
+    TransitionPolicy,
+)
 from ace_music.schemas.pipeline import PipelineInput, PipelineOutput
 
 
@@ -21,8 +27,38 @@ def request_to_pipeline_input(req: DirectorBridge.Request) -> PipelineInput:
     if req.scene_description and req.style_reference:
         description_parts.append(req.scene_description)
 
-    # NOTE: req.intensity is accepted but not yet mapped — future work to
-    # scale style parameters (e.g., guidance_scale) based on intensity level.
+    mix = MixPolicy(
+        **{
+            key: value
+            for key, value in {
+                "target_lufs": req.target_lufs,
+                "max_true_peak_db": req.max_true_peak_db,
+            }.items()
+            if value is not None
+        }
+    )
+    transition = TransitionPolicy(
+        **(
+            {"crossfade_seconds": req.crossfade_seconds}
+            if req.crossfade_seconds is not None
+            else {}
+        )
+    )
+    contract = AudioSceneContract(
+        scene_id=req.scene_id,
+        duration_seconds=req.duration_seconds,
+        mood=req.mood,
+        scene_description=req.scene_description,
+        valence=req.valence,
+        arousal=req.arousal,
+        intensity=req.intensity if req.intensity is not None else 0.5,
+        shot_count=req.shot_count,
+        dialogue_density=req.dialogue_density,
+        layers=AudioLayerPolicy(tts_present=req.tts_present),
+        transition=transition,
+        mix=mix,
+    )
+
     return PipelineInput(
         description=" ".join(description_parts),
         lyrics=req.lyrics_hint,
@@ -33,6 +69,7 @@ def request_to_pipeline_input(req: DirectorBridge.Request) -> PipelineInput:
         seed=req.seed,
         preset_name=req.preset_name,
         is_instrumental=req.is_instrumental,
+        audio_contract=contract,
     )
 
 

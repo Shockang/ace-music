@@ -27,6 +27,10 @@ class OutputInput(BaseModel):
     description: str = ""
     output_dir: str = "./output"
     output_config: OutputConfig | None = None
+    extra_metadata: dict | None = Field(
+        default=None,
+        description="Additional top-level metadata persisted into the sidecar JSON",
+    )
     material_provenance: dict | None = Field(
         default=None,
         description="Material provenance dict from MaterialContext.to_provenance_dict()",
@@ -144,6 +148,8 @@ class OutputWorker(MusicTool[OutputInput, OutputResult]):
             "lyrics": input_data.lyrics_text if input_data.lyrics_text else None,
             "material": input_data.material_provenance,
         }
+        if input_data.extra_metadata:
+            metadata.update(input_data.extra_metadata)
 
         # Write metadata JSON
         meta_file: Path | None = None

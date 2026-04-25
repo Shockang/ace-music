@@ -85,6 +85,12 @@ MusicAgent (planner)
   └── OutputWorker    — final file + metadata
 ```
 
+## Contract-Driven Audio Engine
+
+`ace-music` can also consume `AudioSceneContract` for narrative and video workflows.
+See `docs/audio-engine-architecture.md` for the structured input contract,
+emotion mapping, mix policy, transition rules, and QA acceptance criteria.
+
 ## License
 
 MIT
