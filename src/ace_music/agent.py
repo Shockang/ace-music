@@ -19,6 +19,7 @@ from ace_music.resume import stages_to_run
 from ace_music.schemas.audio import AudioOutput, ProcessedAudio
 from ace_music.schemas.pipeline import PipelineInput, PipelineOutput
 from ace_music.schemas.repair import ArtifactStatus
+from ace_music.tools.emotion_mapper import map_scene_contract
 from ace_music.tools.generator import ACEStepGenerator, GenerationInput, GeneratorConfig
 from ace_music.tools.lyrics_planner import LyricsPlanner
 from ace_music.tools.output import OutputInput, OutputWorker
@@ -99,6 +100,8 @@ class MusicAgent:
         seed = input_data.seed if input_data.seed is not None else random.randint(
             0, 2**32 - 1
         )
+        contract = input_data.audio_contract
+        mapped_audio = map_scene_contract(contract) if contract else None
 
         # Extract material context for pipeline enrichment
         material = input_data.material_context
@@ -124,6 +127,23 @@ class MusicAgent:
             logger.warning(
                 "Material context provided but contains 0 entries — treating as no material"
             )
+
+        effective_description = input_data.description
+        effective_style_tags = list(input_data.style_tags)
+        effective_tempo = input_data.tempo_preference
+        effective_mood = input_data.mood
+        effective_guidance = input_data.guidance_scale
+
+        if mapped_audio:
+            for tag in mapped_audio.style_tags:
+                if tag not in effective_style_tags:
+                    effective_style_tags.append(tag)
+            effective_tempo = effective_tempo or mapped_audio.tempo_preference
+            effective_guidance = effective_guidance or mapped_audio.guidance_scale
+            if mapped_audio.prompt_suffix:
+                effective_description = (
+                    f"{effective_description}. {mapped_audio.prompt_suffix}"
+                )
 
         if workspace and run_id and not workspace.manifest_exists(run_id):
             workspace.create_run(run_id, description=input_data.description, seed=seed)
@@ -164,17 +184,17 @@ class MusicAgent:
                 )
 
         style_input = StyleInput(
-            description=material_description or input_data.description,
-            reference_tags=input_data.style_tags + material_style_tags,
-            tempo_preference=input_data.tempo_preference,
-            mood=material_mood or input_data.mood,
+            description=material_description or effective_description,
+            reference_tags=effective_style_tags + material_style_tags,
+            tempo_preference=effective_tempo,
+            mood=material_mood or effective_mood,
         )
         style_output = await self._style_planner.execute(style_input, preset=preset)
 
         # Apply user overrides
-        if input_data.guidance_scale is not None:
+        if effective_guidance is not None:
             style_output = style_output.model_copy(
-                update={"guidance_scale": input_data.guidance_scale}
+                update={"guidance_scale": effective_guidance}
             )
         if input_data.infer_step is not None:
             style_output = style_output.model_copy(update={"infer_step": input_data.infer_step})
@@ -218,6 +238,16 @@ class MusicAgent:
             workspace.update_artifact(run_id, "post_processor", ArtifactStatus.COMPLETED)
 
         # Stage 5: Output
+        extra_metadata: dict = {}
+        if contract:
+            extra_metadata["audio_contract"] = contract.model_dump(mode="json")
+        if mapped_audio:
+            mapped_metadata = mapped_audio.to_metadata()
+            extra_metadata["mapped_audio"] = mapped_metadata
+            extra_metadata["mix"] = mapped_metadata["mix"]
+            extra_metadata["transition"] = mapped_metadata["transition"]
+            extra_metadata["qa_targets"] = mapped_metadata["qa_targets"]
+
         out_input = OutputInput(
             audio=processed,
             style=style_output,
@@ -226,7 +256,12 @@ class MusicAgent:
             description=input_data.description,
             output_dir=input_data.output_dir,
             output_config=input_data.output_config,
-            material_provenance=material.to_provenance_dict() if material and not material.is_empty else None,
+            extra_metadata=extra_metadata or None,
+            material_provenance=(
+                material.to_provenance_dict()
+                if material and not material.is_empty
+                else None
+            ),
         )
         result = await self._output_worker.execute(out_input)
         logger.info("Output: %s", result.audio_path)

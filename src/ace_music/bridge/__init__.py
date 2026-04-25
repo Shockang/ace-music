@@ -36,6 +36,33 @@ class DirectorBridge(BaseModel):
             default=None, ge=0.0, le=1.0,
             description="Emotional intensity (0.0=subtle, 1.0=extreme)",
         )
+        valence: float | None = Field(
+            default=None, ge=-1.0, le=1.0, description="Valence coordinate for music mapping"
+        )
+        arousal: float | None = Field(
+            default=None, ge=0.0, le=1.0, description="Arousal coordinate for pace/energy mapping"
+        )
+        shot_count: int | None = Field(
+            default=None, ge=0, description="Shot count proxy for visual pacing"
+        )
+        dialogue_density: float = Field(
+            default=0.5, ge=0.0, le=1.0, description="Relative dialogue/TTS density in the scene"
+        )
+        tts_present: bool = Field(
+            default=True, description="Whether TTS/dialogue is expected in the final mix"
+        )
+        target_lufs: float | None = Field(
+            default=None, ge=-30.0, le=-10.0, description="Desired integrated loudness target"
+        )
+        max_true_peak_db: float | None = Field(
+            default=None, ge=-6.0, le=0.0, description="Desired maximum true peak ceiling"
+        )
+        crossfade_seconds: float | None = Field(
+            default=None,
+            ge=0.0,
+            le=10.0,
+            description="Desired segment transition crossfade duration",
+        )
         preset_name: str | None = Field(
             default=None, description="Style preset name to use (e.g. 'dark_suspense')"
         )

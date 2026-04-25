@@ -1,5 +1,6 @@
 """Tests for the full pipeline (MusicAgent)."""
 
+import json
 import os
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from ace_music.bridge import DirectorBridge
 from ace_music.bridge.director_bridge import pipeline_output_to_response, request_to_pipeline_input
 from ace_music.providers.deepseek import DeepSeekProvider
 from ace_music.providers.router import FeatureRouter
+from ace_music.schemas.audio_contract import AudioSceneContract
 from ace_music.schemas.output_config import OutputConfig
 from ace_music.schemas.pipeline import PipelineInput, PipelineOutput
 from ace_music.tools.generator import GeneratorConfig
@@ -97,6 +99,36 @@ class TestMusicAgentPipeline:
         )
         plan = agent._build_plan(input_with_lyrics)
         assert "lyrics_planner" in plan
+
+    @pytest.mark.asyncio
+    async def test_pipeline_metadata_includes_audio_contract(self, agent, tmp_path):
+        contract = AudioSceneContract(
+            scene_id="scene_meta",
+            mood="urgent",
+            duration_seconds=5.0,
+            intensity=0.85,
+            arousal=0.9,
+            dialogue_density=0.8,
+        )
+
+        result = await agent.run(
+            PipelineInput(
+                description="background music",
+                duration_seconds=5.0,
+                is_instrumental=True,
+                audio_contract=contract,
+                output_dir=str(tmp_path),
+            )
+        )
+
+        assert result.metadata["audio_contract"]["scene_id"] == "scene_meta"
+        assert result.metadata["mapped_audio"]["tempo_preference"] == "fast"
+        assert result.metadata["mix"]["ducking_db"] >= 8.0
+        assert result.metadata["qa_targets"]["min_composition_success_rate"] == 0.98
+
+        metadata_path = next(Path(result.audio_path).parent.glob("*_metadata.json"))
+        persisted = json.loads(metadata_path.read_text())
+        assert persisted["audio_contract"]["scene_id"] == "scene_meta"
 
 
 class TestDirectorBridge:
@@ -350,8 +382,6 @@ class TestDirectorBridgeEnhanced:
         assert resp.error == "Generation failed: GPU out of memory"
 
     def test_request_to_pipeline_maps_new_fields(self):
-        from ace_music.bridge.director_bridge import request_to_pipeline_input
-
         req = DirectorBridge.Request(
             scene_id="scene_005",
             mood="dark",
@@ -364,3 +394,29 @@ class TestDirectorBridgeEnhanced:
         assert pipeline_input.preset_name == "dark_suspense"
         assert pipeline_input.is_instrumental is True
         assert "rain" in pipeline_input.description
+
+    def test_request_accepts_contract_mapping_fields(self):
+        req = DirectorBridge.Request(
+            scene_id="scene_contract",
+            mood="tense",
+            duration_seconds=30.0,
+            scene_description="A chase through a narrow alley",
+            intensity=0.9,
+            arousal=0.95,
+            valence=-0.4,
+            shot_count=16,
+            dialogue_density=0.7,
+            tts_present=True,
+            crossfade_seconds=2.0,
+            target_lufs=-17.0,
+            max_true_peak_db=-1.0,
+        )
+
+        pipeline_input = request_to_pipeline_input(req)
+
+        assert pipeline_input.audio_contract is not None
+        assert pipeline_input.audio_contract.scene_id == "scene_contract"
+        assert pipeline_input.audio_contract.intensity == 0.9
+        assert pipeline_input.audio_contract.arousal == 0.95
+        assert pipeline_input.audio_contract.transition.crossfade_seconds == 2.0
+        assert pipeline_input.audio_contract.mix.target_lufs == -17.0
