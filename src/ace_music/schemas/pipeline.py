@@ -78,6 +78,20 @@ class PipelineInput(BaseModel):
         description="Allowed absolute duration delta around requested duration",
     )
 
+    # Backend selection
+    backend: str = Field(
+        default="acestep",
+        description="Generation backend: 'acestep' (local model) or 'minimax' (cloud API)",
+    )
+    mode: str = Field(
+        default="instrumental",
+        description="MiniMax generation mode: 'instrumental', 'lyrics', or 'cover'",
+    )
+    ref_audio: str | None = Field(
+        default=None,
+        description="Reference audio file path for MiniMax cover mode",
+    )
+
 
 class PipelineOutput(BaseModel):
     """Top-level output from the MusicAgent pipeline."""
