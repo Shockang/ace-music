@@ -100,6 +100,9 @@ async def _run_generate(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
             expected_sample_rate=args.expected_sample_rate,
             min_valid_duration_seconds=args.min_valid_duration,
             duration_tolerance_seconds=args.duration_tolerance,
+            backend=args.backend,
+            mode=args.mode,
+            ref_audio=args.ref_audio,
         )
     )
     elapsed = time.monotonic() - started_at
@@ -223,6 +226,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     generate.add_argument(
         "--description", required=True, help="Natural language music description"
+    )
+    generate.add_argument(
+        "--backend",
+        default="acestep",
+        choices=["acestep", "minimax"],
+        help="Generation backend: acestep (local) or minimax (cloud API)",
+    )
+    generate.add_argument(
+        "--mode",
+        default="instrumental",
+        choices=["instrumental", "lyrics", "cover"],
+        help="MiniMax generation mode",
+    )
+    generate.add_argument(
+        "--ref-audio",
+        help="Reference audio file for MiniMax cover mode",
     )
     generate.add_argument("--lyrics", help="Optional raw lyrics text")
     generate.add_argument(
