@@ -40,7 +40,10 @@ class TestInstrumentalMode:
 class TestTaggedLyricsParsing:
     @pytest.mark.asyncio
     async def test_parse_verse_chorus(self, planner):
-        raw = "[verse]\nWalking through the neon lights\nCity dreams in black and white\n\n[chorus]\nWe are the night\nShining so bright"
+        raw = (
+            "[verse]\nWalking through the neon lights\nCity dreams in black and white\n\n"
+            "[chorus]\nWe are the night\nShining so bright"
+        )
 
         result = await planner.execute(LyricsInput(raw_text=raw))
         assert not result.is_instrumental

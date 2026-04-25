@@ -1,11 +1,10 @@
 """Tests for regression runner."""
 
 import json
-from pathlib import Path
 
 import pytest
 
-from ace_music.regression_runner import RegressionRunner, RegressionResult
+from ace_music.regression_runner import RegressionResult, RegressionRunner
 from ace_music.schemas.material import MaterialContext, MaterialEntry
 from ace_music.tools.generator import GeneratorConfig
 

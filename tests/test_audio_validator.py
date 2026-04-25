@@ -87,12 +87,40 @@ class TestAudioValidator:
         assert "file_path" in d
         assert "duration_seconds" in d
 
+    def test_expected_duration_outside_tolerance_flagged(self, validator, valid_wav):
+        result = validator.validate(
+            valid_wav,
+            expected_duration_seconds=5.0,
+            duration_tolerance_seconds=0.5,
+        )
+        assert result.is_valid is False
+        assert any("duration" in e.lower() for e in result.errors)
+
 
 class TestValidationResult:
     def test_valid_result(self):
-        result = ValidationResult(file_path="/tmp/test.wav", is_valid=True, format="wav", sample_rate=48000, channels=2, duration_seconds=30.0, errors=[])
+        result = ValidationResult(
+            file_path="/tmp/test.wav",
+            is_valid=True,
+            format="wav",
+            sample_rate=48000,
+            channels=2,
+            duration_seconds=30.0,
+            errors=[],
+        )
         assert result.is_valid is True
 
     def test_invalid_result_with_errors(self):
-        result = ValidationResult(file_path="/tmp/bad.wav", is_valid=False, format="wav", sample_rate=22050, channels=2, duration_seconds=0.5, errors=["Sample rate 22050 != expected 48000", "Duration 0.5s < minimum 5.0s"])
+        result = ValidationResult(
+            file_path="/tmp/bad.wav",
+            is_valid=False,
+            format="wav",
+            sample_rate=22050,
+            channels=2,
+            duration_seconds=0.5,
+            errors=[
+                "Sample rate 22050 != expected 48000",
+                "Duration 0.5s < minimum 5.0s",
+            ],
+        )
         assert len(result.errors) == 2

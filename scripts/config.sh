@@ -36,7 +36,7 @@ log_error() { echo "[$(date '+%H:%M:%S')] [ERROR] $*" >&2; }
 ssh_cmd() {
     ssh -i "$SSH_KEY" \
         -o ConnectTimeout=10 \
-        -o StrictHostKeyChecking=accept-new \  # trust-on-first-use; verify host key on first connect
+        -o StrictHostKeyChecking=accept-new \
         -o ServerAliveInterval=30 \
         -o ServerAliveCountMax=3 \
         -p "$SSH_PORT" \

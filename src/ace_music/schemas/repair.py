@@ -1,6 +1,6 @@
 """Run manifest and repair ticket models for pipeline error recovery."""
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
@@ -13,7 +13,7 @@ PIPELINE_STAGES = [
 ]
 
 
-class ArtifactStatus(str, Enum):
+class ArtifactStatus(StrEnum):
     """Status of a pipeline stage artifact."""
 
     PENDING = "pending"

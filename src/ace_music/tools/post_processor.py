@@ -56,10 +56,7 @@ class PostProcessor(MusicTool[PostProcessInput, ProcessedAudio]):
         # Trim silence
         if input_data.trim_silence and len(data) > 0:
             threshold = 10 ** (input_data.silence_threshold_db / 20.0)
-            if data.ndim == 2:
-                energy = np.max(np.abs(data), axis=1)
-            else:
-                energy = np.abs(data)
+            energy = np.max(np.abs(data), axis=1) if data.ndim == 2 else np.abs(data)
 
             above = np.where(energy > threshold)[0]
             if len(above) > 0:

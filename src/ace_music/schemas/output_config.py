@@ -22,7 +22,10 @@ class OutputConfig(BaseModel):
     )
     naming: Literal["nested", "flat"] = Field(
         default="nested",
-        description="File naming strategy: 'nested' creates subdirectories, 'flat' uses descriptive filenames",
+        description=(
+            "File naming strategy: 'nested' creates subdirectories, "
+            "'flat' uses descriptive filenames"
+        ),
     )
     filename_template: str = Field(
         default="{slug}_{date}_{seq:03d}",

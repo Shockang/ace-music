@@ -1,11 +1,11 @@
 """Lyrics structure models."""
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class SegmentType(str, Enum):
+class SegmentType(StrEnum):
     """Song segment types recognized by ACE-Step."""
 
     INTRO = "intro"

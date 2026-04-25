@@ -11,14 +11,20 @@ Design follows the Planning pattern: the agent prepares a plan (which tools
 to run in what order), then executes sequentially, passing outputs forward.
 """
 
+import inspect
 import logging
 import random
+import time
+from collections.abc import Awaitable, Callable
+from typing import TypeVar
 
+from ace_music.errors import OutputValidationError, PipelineTimeoutError
 from ace_music.providers.router import FeatureRouter
 from ace_music.resume import stages_to_run
 from ace_music.schemas.audio import AudioOutput, ProcessedAudio
 from ace_music.schemas.pipeline import PipelineInput, PipelineOutput
 from ace_music.schemas.repair import ArtifactStatus
+from ace_music.tools.audio_validator import AudioValidator
 from ace_music.tools.generator import ACEStepGenerator, GenerationInput, GeneratorConfig
 from ace_music.tools.lyrics_planner import LyricsPlanner
 from ace_music.tools.output import OutputInput, OutputWorker
@@ -28,6 +34,7 @@ from ace_music.tools.style_planner import StylePlanner
 from ace_music.workspace import WorkspaceManager
 
 logger = logging.getLogger(__name__)
+StageResult = TypeVar("StageResult")
 
 
 class MusicAgent:
@@ -52,6 +59,7 @@ class MusicAgent:
         self._generator = ACEStepGenerator(generator_config)
         self._post_processor = PostProcessor()
         self._output_worker = OutputWorker()
+        self._audio_validator = AudioValidator()
         self._preset_resolver = preset_resolver or PresetResolver()
         # TODO: Wire FeatureRouter into lyrics_planner/style_planner for LLM-assisted planning
         self._feature_router = feature_router
@@ -78,6 +86,50 @@ class MusicAgent:
 
         return plan
 
+    async def _run_stage(
+        self,
+        stage: str,
+        operation: Awaitable[StageResult] | Callable[[], StageResult],
+        timeout_seconds: float | None,
+        workspace: WorkspaceManager | None,
+        run_id: str | None,
+    ) -> StageResult:
+        """Run one pipeline stage with consistent logs, timeout, and manifest errors."""
+        import asyncio
+
+        logger.info("Stage start: %s", stage)
+        started_at = time.monotonic()
+        try:
+            if inspect.isawaitable(operation):
+                awaitable = operation
+            else:
+                awaitable = asyncio.to_thread(operation)
+            if timeout_seconds is not None and timeout_seconds > 0:
+                result = await asyncio.wait_for(awaitable, timeout=timeout_seconds)
+            else:
+                result = await awaitable
+        except TimeoutError as exc:
+            elapsed = time.monotonic() - started_at
+            message = f"Stage {stage!r} timed out after {timeout_seconds:g}s"
+            logger.error("%s (elapsed %.2fs)", message, elapsed)
+            if workspace and run_id:
+                workspace.update_artifact(
+                    run_id, stage, ArtifactStatus.FAILED, error_message=message
+                )
+            raise PipelineTimeoutError(message) from exc
+        except Exception as exc:
+            elapsed = time.monotonic() - started_at
+            logger.error("Stage failed: %s (elapsed %.2fs): %s", stage, elapsed, exc)
+            logger.debug("Stage failure traceback", exc_info=True)
+            if workspace and run_id:
+                workspace.update_artifact(
+                    run_id, stage, ArtifactStatus.FAILED, error_message=str(exc)
+                )
+            raise
+
+        logger.info("Stage complete: %s (%.2fs)", stage, time.monotonic() - started_at)
+        return result
+
     async def run(
         self,
         input_data: PipelineInput,
@@ -96,6 +148,8 @@ class MusicAgent:
         """
         plan = self._build_plan(input_data)
         logger.info("Pipeline plan: %s", " -> ".join(plan))
+        pipeline_started_at = time.monotonic()
+        stage_timeout = input_data.stage_timeout_seconds
         seed = input_data.seed if input_data.seed is not None else random.randint(
             0, 2**32 - 1
         )
@@ -138,7 +192,13 @@ class MusicAgent:
                 language=input_data.language,
                 is_instrumental=input_data.is_instrumental,
             )
-            lyrics_output = await self._lyrics_planner.execute(lyrics_input)
+            lyrics_output = await self._run_stage(
+                "lyrics_planner",
+                self._lyrics_planner.execute(lyrics_input),
+                stage_timeout,
+                workspace,
+                run_id,
+            )
             logger.info(
                 "Lyrics: %d segments, instrumental=%s",
                 len(lyrics_output.segments),
@@ -169,7 +229,13 @@ class MusicAgent:
             tempo_preference=input_data.tempo_preference,
             mood=material_mood or input_data.mood,
         )
-        style_output = await self._style_planner.execute(style_input, preset=preset)
+        style_output = await self._run_stage(
+            "style_planner",
+            self._style_planner.execute(style_input, preset=preset),
+            stage_timeout,
+            workspace,
+            run_id,
+        )
 
         # Apply user overrides
         if input_data.guidance_scale is not None:
@@ -198,7 +264,13 @@ class MusicAgent:
             output_dir=input_data.output_dir,
             format=input_data.output_format,
         )
-        audio_output = await self._generator.execute(gen_input)
+        audio_output = await self._run_stage(
+            "generator",
+            lambda: self._generator.execute_sync(gen_input),
+            input_data.generation_timeout_seconds or stage_timeout,
+            workspace,
+            run_id,
+        )
         logger.info("Generated: %s (%.1fs)", audio_output.file_path, audio_output.duration_seconds)
         if workspace and run_id:
             workspace.update_artifact(
@@ -212,10 +284,38 @@ class MusicAgent:
             target_format=input_data.output_format,
             output_dir=input_data.output_dir,
         )
-        processed = await self._post_processor.execute(pp_input)
+        processed = await self._run_stage(
+            "post_processor",
+            self._post_processor.execute(pp_input),
+            stage_timeout,
+            workspace,
+            run_id,
+        )
         logger.info("Post-processed: %s", processed.file_path)
         if workspace and run_id:
             workspace.update_artifact(run_id, "post_processor", ArtifactStatus.COMPLETED)
+
+        processed_validation = self._audio_validator.validate(
+            processed.file_path,
+            expected_sample_rate=input_data.expected_sample_rate,
+            min_duration_seconds=input_data.min_valid_duration_seconds,
+            expected_duration_seconds=input_data.duration_seconds,
+            duration_tolerance_seconds=input_data.duration_tolerance_seconds,
+        )
+        if not processed_validation.is_valid:
+            message = "Post-processed audio failed validation: " + "; ".join(
+                processed_validation.errors
+            )
+            logger.error(message)
+            if workspace and run_id:
+                workspace.update_artifact(
+                    run_id,
+                    "post_processor",
+                    ArtifactStatus.FAILED,
+                    file_path=processed.file_path,
+                    error_message=message,
+                )
+            raise OutputValidationError(message, processed_validation.errors)
 
         # Stage 5: Output
         out_input = OutputInput(
@@ -226,12 +326,44 @@ class MusicAgent:
             description=input_data.description,
             output_dir=input_data.output_dir,
             output_config=input_data.output_config,
-            material_provenance=material.to_provenance_dict() if material and not material.is_empty else None,
+            material_provenance=(
+                material.to_provenance_dict() if material and not material.is_empty else None
+            ),
         )
-        result = await self._output_worker.execute(out_input)
+        result = await self._run_stage(
+            "output",
+            self._output_worker.execute(out_input),
+            stage_timeout,
+            workspace,
+            run_id,
+        )
+        final_validation = self._audio_validator.validate(
+            result.audio_path,
+            expected_sample_rate=input_data.expected_sample_rate,
+            min_duration_seconds=input_data.min_valid_duration_seconds,
+            expected_duration_seconds=input_data.duration_seconds,
+            duration_tolerance_seconds=input_data.duration_tolerance_seconds,
+        )
+        if not final_validation.is_valid:
+            message = "Final audio failed validation: " + "; ".join(final_validation.errors)
+            logger.error(message)
+            if workspace and run_id:
+                workspace.update_artifact(
+                    run_id,
+                    "output",
+                    ArtifactStatus.FAILED,
+                    file_path=result.audio_path,
+                    error_message=message,
+                )
+            raise OutputValidationError(message, final_validation.errors)
+
+        result.metadata["validation"] = final_validation.model_dump()
+        result.metadata["elapsed_seconds"] = round(time.monotonic() - pipeline_started_at, 2)
         logger.info("Output: %s", result.audio_path)
         if workspace and run_id:
-            workspace.update_artifact(run_id, "output", ArtifactStatus.COMPLETED)
+            workspace.update_artifact(
+                run_id, "output", ArtifactStatus.COMPLETED, file_path=result.audio_path
+            )
 
         # Build pipeline output
         segments_info = []
@@ -281,6 +413,7 @@ class MusicAgent:
         )
 
         seed = manifest.seed or random.randint(0, 2**32 - 1)
+        stage_timeout = input_data.stage_timeout_seconds
 
         # Load intermediate outputs from completed stages
         lyrics_output = None
@@ -329,7 +462,13 @@ class MusicAgent:
                     raw_text=input_data.description,
                     is_instrumental=input_data.is_instrumental,
                 )
-                lyrics_output = await self._lyrics_planner.execute(lyrics_input)
+                lyrics_output = await self._run_stage(
+                    "lyrics_planner",
+                    self._lyrics_planner.execute(lyrics_input),
+                    stage_timeout,
+                    workspace,
+                    run_id,
+                )
                 workspace.update_artifact(run_id, "lyrics_planner", ArtifactStatus.COMPLETED)
             except Exception as e:
                 workspace.update_artifact(
@@ -348,7 +487,13 @@ class MusicAgent:
                         preset = match.preset
 
                 style_input = StyleInput(description=input_data.description)
-                style_output = await self._style_planner.execute(style_input, preset=preset)
+                style_output = await self._run_stage(
+                    "style_planner",
+                    self._style_planner.execute(style_input, preset=preset),
+                    stage_timeout,
+                    workspace,
+                    run_id,
+                )
                 workspace.update_artifact(run_id, "style_planner", ArtifactStatus.COMPLETED)
             except Exception as e:
                 workspace.update_artifact(
@@ -369,7 +514,13 @@ class MusicAgent:
                     seed=seed,
                     output_dir=workspace.stage_dir(run_id, "generator"),
                 )
-                audio_output = await self._generator.execute(gen_input)
+                audio_output = await self._run_stage(
+                    "generator",
+                    lambda: self._generator.execute_sync(gen_input),
+                    input_data.generation_timeout_seconds or stage_timeout,
+                    workspace,
+                    run_id,
+                )
                 workspace.update_artifact(
                     run_id, "generator", ArtifactStatus.COMPLETED,
                     file_path=audio_output.file_path,

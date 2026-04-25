@@ -1,9 +1,11 @@
 """Tests for ACEStepGenerator (mock mode)."""
 
+import builtins
 import os
 
 import pytest
 
+from ace_music.errors import DependencyUnavailableError
 from ace_music.schemas.audio import AudioOutput
 from ace_music.schemas.lyrics import LyricsOutput
 from ace_music.schemas.style import StyleOutput
@@ -90,3 +92,45 @@ class TestValidateInput:
         }
         result = generator.validate_input(data)
         assert result.audio_duration == 30.0
+
+
+class TestProductionModeDiagnostics:
+    def test_missing_acestep_dependency_is_explicit(self, monkeypatch):
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "acestep.pipeline_ace_step":
+                raise ImportError("No module named 'acestep'")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+
+        generator = ACEStepGenerator(GeneratorConfig(mock_mode=False, require_cuda=False))
+
+        with pytest.raises(DependencyUnavailableError) as exc:
+            generator._ensure_pipeline()
+
+        assert "ACE-Step" in str(exc.value)
+        assert "mock" in str(exc.value).lower()
+
+    def test_missing_acestep_can_explicitly_fallback_to_mock(self, monkeypatch):
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "acestep.pipeline_ace_step":
+                raise ImportError("No module named 'acestep'")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+
+        generator = ACEStepGenerator(
+            GeneratorConfig(
+                mock_mode=False,
+                require_cuda=False,
+                allow_mock_fallback=True,
+            )
+        )
+
+        generator._ensure_pipeline()
+
+        assert generator._pipeline == "mock"

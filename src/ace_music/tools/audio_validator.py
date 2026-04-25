@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 class ValidationResult(BaseModel):
     """Result of audio file validation."""
+
     file_path: str
     is_valid: bool
     format: str = "unknown"
@@ -29,6 +30,8 @@ class AudioValidator:
         file_path: str,
         expected_sample_rate: int = 48000,
         min_duration_seconds: float = 1.0,
+        expected_duration_seconds: float | None = None,
+        duration_tolerance_seconds: float = 5.0,
     ) -> ValidationResult:
         path = Path(file_path)
         errors: list[str] = []
@@ -70,6 +73,15 @@ class AudioValidator:
 
         if duration < min_duration_seconds:
             errors.append(f"Duration {duration:.1f}s < minimum {min_duration_seconds:.1f}s")
+
+        if expected_duration_seconds is not None:
+            delta = abs(duration - expected_duration_seconds)
+            if delta > duration_tolerance_seconds:
+                errors.append(
+                    "Duration "
+                    f"{duration:.1f}s outside expected {expected_duration_seconds:.1f}s "
+                    f"± {duration_tolerance_seconds:.1f}s"
+                )
 
         if file_size < 1024:
             errors.append(f"File too small ({file_size} bytes), likely empty or corrupt")

@@ -1,8 +1,12 @@
 """Tests for material context schemas."""
 
-import pytest
+import json
+from pathlib import Path
 
 from ace_music.schemas.material import MaterialContext, MaterialEntry, MaterialSource
+from ace_music.tools.material_loader import MaterialLoader
+
+FIXTURE_DIR = Path(__file__).resolve().parent.parent
 
 
 class TestMaterialEntry:
@@ -123,15 +127,6 @@ class TestMaterialSource:
         assert source.directory == "/path/to/materials"
 
 
-import json
-from pathlib import Path
-
-from ace_music.tools.material_loader import MaterialLoader
-
-
-FIXTURE_DIR = Path(__file__).resolve().parent.parent
-
-
 class TestMaterialLoader:
     def _write_material_file(self, tmp_path, filename, data):
         materials_dir = tmp_path / "materials"
@@ -143,7 +138,13 @@ class TestMaterialLoader:
         data = {
             "date": "2026-04-16",
             "entries": [
-                {"category": "style", "content": "ambient electronic", "tags": ["ambient"], "mood": "calm", "style": "ambient"}
+                {
+                    "category": "style",
+                    "content": "ambient electronic",
+                    "tags": ["ambient"],
+                    "mood": "calm",
+                    "style": "ambient",
+                }
             ],
         }
         mat_dir = self._write_material_file(tmp_path, "material_2026-04-16.json", data)
@@ -155,8 +156,14 @@ class TestMaterialLoader:
         assert ctx.entries[0].mood == "calm"
 
     def test_load_latest_only(self, tmp_path):
-        old_data = {"date": "2026-04-15", "entries": [{"category": "style", "content": "old style"}]}
-        new_data = {"date": "2026-04-16", "entries": [{"category": "style", "content": "new style"}]}
+        old_data = {
+            "date": "2026-04-15",
+            "entries": [{"category": "style", "content": "old style"}],
+        }
+        new_data = {
+            "date": "2026-04-16",
+            "entries": [{"category": "style", "content": "new style"}],
+        }
         mat_dir = self._write_material_file(tmp_path, "material_2026-04-15.json", old_data)
         self._write_material_file(tmp_path, "material_2026-04-16.json", new_data)
         loader = MaterialLoader(directory=mat_dir)

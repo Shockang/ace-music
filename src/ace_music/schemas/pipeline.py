@@ -43,6 +43,36 @@ class PipelineInput(BaseModel):
         description="Daily material context (inspiration, lyrics, style) driving this generation",
     )
 
+    # Automation hardening
+    stage_timeout_seconds: float | None = Field(
+        default=120.0,
+        gt=0,
+        description=(
+            "Default timeout per non-generation pipeline stage; "
+            "None disables stage timeout"
+        ),
+    )
+    generation_timeout_seconds: float | None = Field(
+        default=600.0,
+        gt=0,
+        description="Timeout for the model generation stage; None falls back to stage timeout",
+    )
+    expected_sample_rate: int = Field(
+        default=48000,
+        gt=0,
+        description="Expected output sample rate used by final audio validation",
+    )
+    min_valid_duration_seconds: float = Field(
+        default=1.0,
+        ge=0,
+        description="Minimum valid output duration for audio validation",
+    )
+    duration_tolerance_seconds: float = Field(
+        default=5.0,
+        ge=0,
+        description="Allowed absolute duration delta around requested duration",
+    )
+
 
 class PipelineOutput(BaseModel):
     """Top-level output from the MusicAgent pipeline."""

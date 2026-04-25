@@ -8,7 +8,7 @@ Design inspired by cc-haha's Tool interface pattern:
 """
 
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 from pydantic import BaseModel
 
@@ -16,7 +16,7 @@ InputT = TypeVar("InputT", bound=BaseModel)
 OutputT = TypeVar("OutputT", bound=BaseModel)
 
 
-class MusicTool(ABC, Generic[InputT, OutputT]):
+class MusicTool[InputT: BaseModel, OutputT: BaseModel](ABC):
     """Abstract base class for all music pipeline tools.
 
     Each tool declares its input/output schemas as Pydantic models and

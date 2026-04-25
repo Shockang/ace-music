@@ -11,9 +11,11 @@ import logging
 import random
 import time
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
+from ace_music.errors import DependencyUnavailableError, GPUUnavailableError
 from ace_music.schemas.audio import AudioOutput
 from ace_music.schemas.lyrics import LyricsOutput
 from ace_music.schemas.style import StyleOutput
@@ -47,6 +49,14 @@ class GeneratorConfig(BaseModel):
     overlapped_decode: bool = False
     mock_mode: bool = Field(
         default=False, description="Use mock generator (no GPU required)"
+    )
+    require_cuda: bool = Field(
+        default=True,
+        description="Require CUDA in production mode before loading ACE-Step",
+    )
+    allow_mock_fallback: bool = Field(
+        default=False,
+        description="Explicitly fall back to mock mode when production dependencies are missing",
     )
 
 
@@ -85,15 +95,38 @@ class ACEStepGenerator(MusicTool[GenerationInput, AudioOutput]):
     def is_concurrency_safe(self) -> bool:
         return False
 
-    def _ensure_pipeline(self):
+    def _ensure_cuda_available(self) -> None:
+        """Fail early when production mode requires CUDA but it is unavailable."""
+        if self._config.cpu_offload or not self._config.require_cuda:
+            return
+
+        try:
+            import torch
+        except ImportError as exc:
+            raise DependencyUnavailableError(
+                "PyTorch is required for production generation. Install with "
+                "`pip install -e '.[model]'` "
+                "or run with mock mode for CPU-only smoke tests."
+            ) from exc
+
+        if not torch.cuda.is_available():
+            raise GPUUnavailableError(
+                "CUDA GPU is not available. Production ACE-Step generation requires CUDA; "
+                "use mock mode for smoke tests or enable cpu_offload only if your ACE-Step "
+                "setup supports it."
+            )
+
+    def _ensure_pipeline(self) -> Any:
         """Load the ACE-Step pipeline (singleton pattern)."""
         if self._pipeline is not None:
-            return
+            return self._pipeline
 
         if self._config.mock_mode:
             logger.info("Generator running in mock mode (no model loaded)")
             self._pipeline = "mock"
-            return
+            return self._pipeline
+
+        self._ensure_cuda_available()
 
         # Lazy import to avoid requiring torch at module level
         try:
@@ -109,8 +142,16 @@ class ACEStepGenerator(MusicTool[GenerationInput, AudioOutput]):
             )
             logger.info("ACE-Step pipeline loaded successfully")
         except ImportError:
-            logger.warning("ACE-Step not installed, falling back to mock mode")
-            self._pipeline = "mock"
+            if self._config.allow_mock_fallback:
+                logger.warning("ACE-Step not installed; explicit fallback to mock mode enabled")
+                self._pipeline = "mock"
+            else:
+                raise DependencyUnavailableError(
+                    "ACE-Step is not installed. Install ACE-Step/model dependencies for production "
+                    "generation, or pass mock mode explicitly for smoke tests."
+                ) from None
+
+        return self._pipeline
 
     def _mock_generate(self, input_data: GenerationInput) -> AudioOutput:
         """Generate a mock WAV file for testing."""
@@ -145,7 +186,8 @@ class ACEStepGenerator(MusicTool[GenerationInput, AudioOutput]):
             channels=num_channels,
         )
 
-    async def execute(self, input_data: GenerationInput) -> AudioOutput:
+    def execute_sync(self, input_data: GenerationInput) -> AudioOutput:
+        """Blocking generation path suitable for running in a worker thread."""
         self._ensure_pipeline()
 
         seed = input_data.seed if input_data.seed is not None else random.randint(0, 2**32 - 1)
@@ -199,3 +241,6 @@ class ACEStepGenerator(MusicTool[GenerationInput, AudioOutput]):
             format=input_data.format,
             channels=2,
         )
+
+    async def execute(self, input_data: GenerationInput) -> AudioOutput:
+        return self.execute_sync(input_data)

@@ -12,6 +12,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 # Copy project definition and source
 COPY pyproject.toml ./
 COPY src/ src/
+COPY configs/ configs/
+COPY sample-music-material.json ./sample-music-material.json
 
 # Install core + dev dependencies
 RUN uv pip install --system --no-cache -e ".[dev]"

@@ -19,7 +19,9 @@ class StyleInput(BaseModel):
     tempo_preference: str | None = Field(
         default=None, description="Tempo preference (e.g. 'fast', '120 bpm', 'slow ballad')"
     )
-    mood: str | None = Field(default=None, description="Mood descriptor (e.g. 'melancholic', 'upbeat')")
+    mood: str | None = Field(
+        default=None, description="Mood descriptor (e.g. 'melancholic', 'upbeat')"
+    )
 
 
 # Predefined style tag mappings for common genres
