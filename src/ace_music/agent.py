@@ -18,7 +18,11 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
-from ace_music.errors import OutputValidationError, PipelineTimeoutError
+from ace_music.errors import (
+    GenerationFailedError,
+    OutputValidationError,
+    PipelineTimeoutError,
+)
 from ace_music.providers.router import FeatureRouter
 from ace_music.resume import stages_to_run
 from ace_music.schemas.audio import AudioOutput, ProcessedAudio
@@ -153,7 +157,12 @@ class MusicAgent:
         stage_timeout = input_data.stage_timeout_seconds
 
         if self._minimax_generator is None:
-            self._minimax_generator = MiniMaxMusicGenerator()
+            try:
+                self._minimax_generator = MiniMaxMusicGenerator()
+            except ValueError as exc:
+                raise GenerationFailedError(
+                    f"MiniMax configuration error: {exc}"
+                ) from exc
 
         if workspace and run_id and not workspace.manifest_exists(run_id):
             workspace.create_run(run_id, description=input_data.description, seed=seed)
@@ -167,7 +176,6 @@ class MusicAgent:
             lyrics=input_data.lyrics,
             ref_audio=input_data.ref_audio,
             output_dir=input_data.output_dir,
-            seed=seed,
         )
         audio_output = await self._run_stage(
             "minimax_generator",

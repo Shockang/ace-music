@@ -3,8 +3,9 @@
 import asyncio
 import time
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from pydantic import ValidationError
 
@@ -25,7 +26,6 @@ class TestMiniMaxMusicInput:
         assert inp.lyrics is None
         assert inp.ref_audio is None
         assert inp.output_dir == "./output"
-        assert inp.seed is None
 
     def test_lyrics_mode(self):
         inp = MiniMaxMusicInput(
@@ -67,7 +67,7 @@ class TestMiniMaxMusicConfig:
         assert config.timeout == 120.0
         assert config.rate_limit_per_minute == 5
         assert config.sample_rate == 44100
-        assert config.output_format == "mp3"
+        assert config.audio_format == "mp3"
 
     def test_from_env(self):
         with patch.dict("os.environ", {"MINIMAX_API_KEY": "env-key"}):
@@ -116,6 +116,15 @@ class TestRateLimiter:
         asyncio.run(limiter.acquire())
         elapsed = time.monotonic() - start
         assert elapsed < 0.1
+
+    def test_acquire_does_not_double_count_after_wait(self):
+        """After waiting through a full window the limiter should hold exactly
+        max_calls timestamps, not max_calls + 1."""
+        limiter = RateLimiter(max_calls=2, period_seconds=0.2)
+        asyncio.run(limiter.acquire())
+        asyncio.run(limiter.acquire())
+        asyncio.run(limiter.acquire())  # waits for window to slide
+        assert len(limiter._timestamps) <= 2
 
 
 class TestMiniMaxMusicGenerator:
@@ -218,3 +227,56 @@ class TestMiniMaxMusicGenerator:
             inp = MiniMaxMusicInput(description="test", output_dir=str(tmp_path))
             with pytest.raises(GenerationFailedError, match="audio_url"):
                 await gen.execute(inp)
+
+    @pytest.mark.asyncio
+    async def test_execute_http_status_error_surfaces_status(self, tmp_path):
+        """An HTTPStatusError from MiniMax should map to GenerationFailedError
+        with the actual status code in the message."""
+        config = MiniMaxMusicConfig(api_key="test-key")
+        gen = MiniMaxMusicGenerator(config)
+
+        request = httpx.Request("POST", config.base_url)
+        response = MagicMock(spec=httpx.Response)
+        response.status_code = 429
+        response.text = "Too Many Requests"
+        http_err = httpx.HTTPStatusError("429", request=request, response=response)
+
+        with patch.object(gen, "_call_api", new_callable=AsyncMock) as mock_api:
+            mock_api.side_effect = http_err
+            inp = MiniMaxMusicInput(description="test", output_dir=str(tmp_path))
+            with pytest.raises(GenerationFailedError, match="429"):
+                await gen.execute(inp)
+
+    @pytest.mark.asyncio
+    async def test_execute_business_error_surfaces_message(self, tmp_path):
+        """`base_resp.status_code != 0` should surface the actual reason
+        instead of a misleading 'missing audio_url' message."""
+        config = MiniMaxMusicConfig(api_key="test-key")
+        gen = MiniMaxMusicGenerator(config)
+
+        bad_business = {
+            "data": {},
+            "base_resp": {"status_code": 1004, "status_msg": "quota exhausted"},
+        }
+        with patch.object(
+            gen, "_call_api", new_callable=AsyncMock, return_value=bad_business
+        ):
+            inp = MiniMaxMusicInput(description="test", output_dir=str(tmp_path))
+            with pytest.raises(GenerationFailedError, match="quota exhausted"):
+                await gen.execute(inp)
+
+    @pytest.mark.asyncio
+    async def test_execute_cover_missing_ref_audio_raises(self, tmp_path):
+        """Cover mode with a non-existent ref_audio should fail fast with a
+        clear error rather than letting MiniMax 400 us."""
+        config = MiniMaxMusicConfig(api_key="test-key")
+        gen = MiniMaxMusicGenerator(config)
+
+        inp = MiniMaxMusicInput(
+            description="cover test",
+            mode="cover",
+            ref_audio=str(tmp_path / "does_not_exist.mp3"),
+            output_dir=str(tmp_path),
+        )
+        with pytest.raises(GenerationFailedError, match="ref_audio not found"):
+            await gen.execute(inp)

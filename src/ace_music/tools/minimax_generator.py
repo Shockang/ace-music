@@ -5,11 +5,13 @@ Supports three modes: instrumental, lyrics (with AI auto-write), and cover.
 Rate-limited to 5 requests per minute as per MiniMax Token Plan quota.
 """
 
+from __future__ import annotations
+
 import asyncio
-import json
 import logging
 import os
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Literal
 
@@ -34,9 +36,10 @@ class MiniMaxMusicInput(BaseModel):
         description="Generation mode: instrumental, lyrics, or cover",
     )
     lyrics: str | None = Field(default=None, max_length=3500)
-    ref_audio: str | None = Field(default=None, description="Reference audio for cover mode")
+    ref_audio: str | None = Field(
+        default=None, description="Reference audio for cover mode"
+    )
     output_dir: str = Field(default="./output")
-    seed: int | None = None
 
 
 class MiniMaxMusicConfig(BaseModel):
@@ -47,7 +50,7 @@ class MiniMaxMusicConfig(BaseModel):
     timeout: float = 120.0
     rate_limit_per_minute: int = 5
     sample_rate: int = 44100
-    output_format: str = "mp3"
+    audio_format: str = "mp3"
 
     def model_post_init(self, __context: Any) -> None:
         if self.api_key is None:
@@ -59,7 +62,12 @@ class MiniMaxMusicConfig(BaseModel):
 
 
 class RateLimiter:
-    """Simple sliding-window rate limiter with async-safe locking."""
+    """Sliding-window rate limiter with async-safe locking.
+
+    Releases the lock during sleep so concurrent waiters don't serialize
+    their waits, and re-checks the window after waking to avoid double-counting
+    timestamps.
+    """
 
     def __init__(self, max_calls: int, period_seconds: float) -> None:
         self._max_calls = max_calls
@@ -68,15 +76,19 @@ class RateLimiter:
         self._lock = asyncio.Lock()
 
     async def acquire(self) -> None:
-        async with self._lock:
-            now = time.monotonic()
-            self._timestamps = [t for t in self._timestamps if now - t < self._period]
-            if len(self._timestamps) >= self._max_calls:
+        while True:
+            async with self._lock:
+                now = time.monotonic()
+                self._timestamps = [
+                    t for t in self._timestamps if now - t < self._period
+                ]
+                if len(self._timestamps) < self._max_calls:
+                    self._timestamps.append(now)
+                    return
                 wait_time = self._period - (now - self._timestamps[0])
-                if wait_time > 0:
-                    logger.info("Rate limit reached, waiting %.1fs", wait_time)
-                    await asyncio.sleep(wait_time)
-            self._timestamps.append(time.monotonic())
+            if wait_time > 0:
+                logger.info("Rate limit reached, waiting %.1fs", wait_time)
+                await asyncio.sleep(wait_time)
 
 
 class MiniMaxMusicGenerator(MusicTool[MiniMaxMusicInput, AudioOutput]):
@@ -122,7 +134,7 @@ class MiniMaxMusicGenerator(MusicTool[MiniMaxMusicInput, AudioOutput]):
             "prompt": input_data.description,
             "audio_setting": {
                 "sample_rate": self._config.sample_rate,
-                "format": self._config.output_format,
+                "format": self._config.audio_format,
             },
             "output_format": "url",
         }
@@ -143,7 +155,12 @@ class MiniMaxMusicGenerator(MusicTool[MiniMaxMusicInput, AudioOutput]):
         return payload
 
     async def _call_api(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Call the MiniMax Music API."""
+        """Call the MiniMax Music API.
+
+        Note: do not log the request headers (Authorization bearer token) or
+        the full payload at any level — the prompt may contain user content
+        and the header carries the API key.
+        """
         headers = {
             "Authorization": f"Bearer {self._config.api_key}",
             "Content-Type": "application/json",
@@ -156,12 +173,27 @@ class MiniMaxMusicGenerator(MusicTool[MiniMaxMusicInput, AudioOutput]):
             return response.json()
 
     def _extract_audio_url(self, result: dict[str, Any]) -> str:
-        """Extract audio download URL from API response."""
-        data = result.get("data", {})
+        """Extract audio download URL from API response.
+
+        MiniMax returns HTTP 200 with `base_resp.status_code != 0` for
+        business-logic failures (quota exhausted, content rejected, etc.).
+        Surface those before the generic 'missing audio_url' diagnostic so
+        operators see the actual cause.
+        """
+        base_resp = result.get("base_resp") or {}
+        status_code = base_resp.get("status_code", 0)
+        if status_code != 0:
+            status_msg = base_resp.get("status_msg", "unknown error")
+            raise GenerationFailedError(
+                f"MiniMax API error {status_code}: {status_msg}"
+            )
+
+        data = result.get("data") or {}
         url = data.get("audio_url")
         if not url:
+            redacted_keys = sorted(result.keys())
             raise GenerationFailedError(
-                f"MiniMax response missing audio_url: {json.dumps(result)[:200]}"
+                f"MiniMax response missing audio_url; top-level keys: {redacted_keys}"
             )
         return url
 
@@ -169,7 +201,10 @@ class MiniMaxMusicGenerator(MusicTool[MiniMaxMusicInput, AudioOutput]):
         """Download generated audio from URL to output directory."""
         out_path = Path(output_dir)
         out_path.mkdir(parents=True, exist_ok=True)
-        filename = f"minimax_{int(time.time())}.mp3"
+        filename = (
+            f"minimax_{int(time.time())}_{uuid.uuid4().hex[:8]}"
+            f".{self._config.audio_format}"
+        )
         filepath = out_path / filename
 
         async with httpx.AsyncClient(timeout=self._config.timeout) as client:
@@ -181,10 +216,21 @@ class MiniMaxMusicGenerator(MusicTool[MiniMaxMusicInput, AudioOutput]):
 
     async def execute(self, input_data: MiniMaxMusicInput) -> AudioOutput:
         """Generate music via MiniMax Music API."""
+        if (
+            input_data.mode == "cover"
+            and input_data.ref_audio
+            and not Path(input_data.ref_audio).is_file()
+        ):
+            raise GenerationFailedError(
+                f"ref_audio not found: {input_data.ref_audio}"
+            )
+
         await self._rate_limiter.acquire()
 
         payload = self._build_payload(input_data)
-        logger.info("MiniMax request: model=%s, mode=%s", payload["model"], input_data.mode)
+        logger.info(
+            "MiniMax request: model=%s, mode=%s", payload["model"], input_data.mode
+        )
 
         try:
             result = await self._call_api(payload)
@@ -192,16 +238,29 @@ class MiniMaxMusicGenerator(MusicTool[MiniMaxMusicInput, AudioOutput]):
             raise GenerationFailedError(
                 f"MiniMax API returned {e.response.status_code}: {e.response.text[:200]}"
             ) from e
+        except httpx.HTTPError as e:
+            raise GenerationFailedError(
+                f"MiniMax Music API request failed: {e}"
+            ) from e
+        except GenerationFailedError:
+            raise
         except Exception as e:
-            raise GenerationFailedError(f"MiniMax Music API request failed: {e}") from e
+            raise GenerationFailedError(
+                f"MiniMax Music API request failed: {e}"
+            ) from e
 
         audio_url = self._extract_audio_url(result)
-        audio_path = await self._download_audio(audio_url, input_data.output_dir)
+        try:
+            audio_path = await self._download_audio(audio_url, input_data.output_dir)
+        except httpx.HTTPError as e:
+            raise GenerationFailedError(
+                f"MiniMax audio download failed: {e}"
+            ) from e
 
         return AudioOutput(
             file_path=audio_path,
             duration_seconds=0.0,
             sample_rate=self._config.sample_rate,
-            format=self._config.output_format,
+            format=self._config.audio_format,
             channels=2,
         )

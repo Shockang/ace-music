@@ -1,5 +1,7 @@
 """Pipeline input/output models for the full generation flow."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from ace_music.schemas.audio_contract import AudioSceneContract
@@ -79,11 +81,11 @@ class PipelineInput(BaseModel):
     )
 
     # Backend selection
-    backend: str = Field(
+    backend: Literal["acestep", "minimax"] = Field(
         default="acestep",
         description="Generation backend: 'acestep' (local model) or 'minimax' (cloud API)",
     )
-    mode: str = Field(
+    mode: Literal["instrumental", "lyrics", "cover"] = Field(
         default="instrumental",
         description="MiniMax generation mode: 'instrumental', 'lyrics', or 'cover'",
     )
