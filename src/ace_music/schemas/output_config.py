@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -13,7 +12,7 @@ class OutputConfig(BaseModel):
 
     Controls how output files are named and organized:
     - "nested": {base_dir}/{style_slug}/{timestamp}/audio.wav (default, development)
-    - "flat": {base_dir}/{slug}_{date}_{seq}.wav (production, Obsidian integration)
+    - "flat": {base_dir}/{slug}_{date}_{seq}.wav (production-friendly flat layout)
     """
 
     base_dir: str = Field(
@@ -37,17 +36,6 @@ class OutputConfig(BaseModel):
     )
 
     @classmethod
-    def for_obsidian(cls, base: str | None = None) -> OutputConfig:
-        """Create config targeting Obsidian outputs directory.
-
-        Args:
-            base: Custom base path. Defaults to ~/Library/Mobile Documents/.../outputs/music
-        """
-        obsidian_base = base or str(
-            Path.home()
-            / "Library/Mobile Documents/iCloud~md~obsidian/Documents/AI/outputs/music"
-        )
-        return cls(
-            base_dir=obsidian_base,
-            naming="flat",
-        )
+    def for_flat_output(cls, base: str) -> OutputConfig:
+        """Create config targeting a caller-provided flat output directory."""
+        return cls(base_dir=base, naming="flat")

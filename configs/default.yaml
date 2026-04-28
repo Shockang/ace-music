@@ -40,8 +40,6 @@ output:
   include_metadata: true
   naming: "nested"                    # "nested" (dev) or "flat" (production/Obsidian)
   filename_template: "{slug}_{date}_{seq:03d}"
-  # Uncomment for Obsidian integration:
-  # obsidian_base: "~/Library/Mobile Documents/iCloud~md~obsidian/Documents/AI/outputs/music"
 
 # LLM Provider configuration (optional — pipeline works without LLM)
 # Uncomment and configure when using LLM-assisted lyrics/style planning:

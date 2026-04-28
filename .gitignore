@@ -16,3 +16,6 @@ output/
 .env
 .env.*
 .omx/
+CLAUDE.md
+PROMPT-*.md
+docs/superpowers/

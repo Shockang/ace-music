@@ -28,17 +28,13 @@ class TestOutputConfigDefaults:
             OutputConfig(naming="invalid")
 
 
-class TestOutputConfigObsidianFactory:
-    def test_obsidian_factory_sets_flat_naming(self):
-        config = OutputConfig.for_obsidian(base="/tmp/test_output")
+class TestOutputConfigFlatFactory:
+    def test_flat_factory_sets_flat_naming(self):
+        config = OutputConfig.for_flat_output(base="/tmp/test_output")
         assert config.naming == "flat"
         assert config.base_dir == "/tmp/test_output"
 
-    def test_obsidian_factory_default_path_contains_music(self):
-        config = OutputConfig.for_obsidian()
-        assert "outputs/music" in config.base_dir
-
-    def test_obsidian_factory_custom_base(self):
-        config = OutputConfig.for_obsidian(base="/custom/path")
+    def test_flat_factory_custom_base(self):
+        config = OutputConfig.for_flat_output(base="/custom/path")
         assert config.base_dir == "/custom/path"
         assert config.naming == "flat"
