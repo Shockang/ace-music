@@ -1,0 +1,35 @@
+name: Feature request
+description: Propose a public-facing feature or API improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use case
+      description: What are you trying to accomplish?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: target_area
+    attributes:
+      label: Target area
+      options:
+        - Mock mode
+        - Local ACE-Step
+        - MiniMax
+        - Bridge API
+        - Documentation
+        - Other
+    validations:
+      required: true

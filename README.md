@@ -1,96 +1,173 @@
 # ace-music
 
-AI music generation agent powered by ACE-Step 1.5.
+[简体中文](README.zh-CN.md)
 
-Planning-mode architecture: LyricsPlanner → StylePlanner → GenerationWorker → PostProcessor → OutputWorker.
+[![CI](https://github.com/Shockang/ace-music/actions/workflows/ci.yml/badge.svg)](https://github.com/Shockang/ace-music/actions/workflows/ci.yml)
+![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)
+![Python 3.12](https://img.shields.io/badge/python-3.12-06b6d4.svg)
 
-## Setup
+![ace-music banner](assets/readme-banner.svg)
+
+Contract-driven AI music generation for Python workflows, automation pipelines, and scene-oriented soundtrack generation.
+
+## Why ace-music
+
+`ace-music` is a Python package for generating and validating music outputs with a workflow-friendly interface. It provides:
+
+- a CLI with machine-readable JSON summaries
+- a mock mode for smoke tests and CI
+- a local ACE-Step path for GPU-backed generation
+- a MiniMax path for cloud-backed generation
+- structured input contracts for scene-aware orchestration
+
+## Features
+
+- Stable CLI: `generate` and `validate` commands with clear exit codes.
+- Multiple backends: mock, local ACE-Step, and MiniMax.
+- Structured contracts: `PipelineInput`, `AudioSceneContract`, and `DirectorBridge`.
+- Automation-friendly outputs: JSON summaries, validation metadata, and predictable output paths.
+- Testable release surface: CPU-safe mock mode lets contributors verify changes without GPU access.
+
+## Quick Start
+
+The shortest successful path uses mock mode and requires no GPU:
 
 ```bash
-# Create venv and install
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate
 pip install -e ".[dev]"
-
-# With model support (GPU required)
-pip install -e ".[dev,model]"
-```
-
-## Usage
-
-### CLI
-
-```bash
-# Smoke test without GPU/model dependencies
 ace-music generate \
   --mock \
   --description "short jazz improvisation" \
   --duration 5 \
   --output-dir ./output \
   --summary-json ./output/last-run.json
+```
 
-# Validate an existing WAV for automation gates
+You should get a generated WAV file plus a JSON summary at `./output/last-run.json`.
+
+## Installation
+
+Development and mock-mode setup:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+Local ACE-Step model support:
+
+```bash
+pip install -e ".[dev,model]"
+```
+
+`.[model]` is intended for GPU-backed local generation and is intentionally excluded from CI.
+
+## Runtime Modes
+
+| Mode | When to use it | Requirements |
+| --- | --- | --- |
+| Mock | smoke tests, CI, first-run validation | no GPU |
+| ACE-Step local | local high-fidelity generation | compatible GPU, model setup |
+| MiniMax | cloud backend path | `MINIMAX_API_KEY` |
+
+## CLI Example
+
+Generate audio:
+
+```bash
+ace-music generate \
+  --mock \
+  --description "dreamy synthwave with warm pads" \
+  --duration 10 \
+  --output-dir ./output \
+  --summary-json ./output/run.json
+```
+
+Validate an existing file:
+
+```bash
 ace-music validate ./output/example.wav \
   --expected-sample-rate 48000 \
   --expected-duration 30 \
   --duration-tolerance 5
 ```
 
-The CLI prints a JSON summary to stdout and optionally writes the same summary
-to `--summary-json` for cron/closed-loop automation. Production generation no
-longer silently falls back to mock audio when ACE-Step or CUDA is unavailable;
-use `--mock` for local smoke tests or `--allow-mock-fallback` only when that
-fallback is intentional.
-
-Exit codes are grouped for diagnostics:
-
-| Code | Meaning |
-| --- | --- |
-| 0 | Success |
-| 2 | Input validation error |
-| 20 | Dependency unavailable |
-| 21 | GPU unavailable |
-| 30 | Generation failed |
-| 40 | Stage timeout |
-| 50 | Output validation failed |
-
-### Python
+## Python Example
 
 ```python
+import asyncio
+
 from ace_music.agent import MusicAgent
 from ace_music.schemas.pipeline import PipelineInput
+from ace_music.tools.generator import GeneratorConfig
 
-agent = MusicAgent()
-result = await agent.run(PipelineInput(
-    description="A dreamy synthwave track about neon cities",
-    duration_seconds=60.0,
-))
-print(result.audio_path)
+
+async def main() -> None:
+    agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
+    result = await agent.run(
+        PipelineInput(
+            description="A dreamy synthwave track about neon cities",
+            duration_seconds=20.0,
+            output_dir="./output",
+        )
+    )
+    print(result.audio_path)
+
+
+asyncio.run(main())
 ```
-
-`PipelineInput` includes automation hardening knobs:
-
-- `stage_timeout_seconds` for non-generation stages.
-- `generation_timeout_seconds` for the model call.
-- `expected_sample_rate`, `min_valid_duration_seconds`, and
-  `duration_tolerance_seconds` for final WAV validation.
 
 ## Architecture
 
-```
-MusicAgent (planner)
-  ├── LyricsPlanner   — parse & structure lyrics
-  ├── StylePlanner    — map style description to ACE-Step params
-  ├── Generator       — call ACE-Step model (or mock)
-  ├── PostProcessor   — format conversion, loudness normalization
-  └── OutputWorker    — final file + metadata
+```text
+MusicAgent
+  -> LyricsPlanner
+  -> StylePlanner
+  -> Generator or MiniMaxMusicGenerator
+  -> PostProcessor
+  -> OutputWorker
 ```
 
-## Contract-Driven Audio Engine
+The default flow is contract-driven and stage-based. For more detail, see [docs/audio-engine-architecture.md](docs/audio-engine-architecture.md).
 
-`ace-music` can also consume `AudioSceneContract` for narrative and video workflows.
-See `docs/audio-engine-architecture.md` for the structured input contract,
-emotion mapping, mix policy, transition rules, and QA acceptance criteria.
+## Docs
+
+- [Validation guide](docs/MUSIC_ENGINE_VALIDATION.md)
+- [Architecture overview](docs/audio-engine-architecture.md)
+
+## Troubleshooting
+
+### `ModuleNotFoundError` after install
+
+Activate the virtual environment and reinstall:
+
+```bash
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+### CUDA or GPU unavailable
+
+Use `--mock` for smoke tests. For local ACE-Step generation, install `.[model]` and run on a machine with supported CUDA tooling.
+
+### `MINIMAX_API_KEY` missing
+
+Export the key before using the MiniMax backend:
+
+```bash
+export MINIMAX_API_KEY="your-key"
+```
+
+### Mock mode does not match production quality
+
+That is expected. Mock mode is for CLI validation, automation checks, and contribution workflows, not fidelity evaluation.
+
+## Contributing
+
+Contribution setup, quality gates, and PR expectations live in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).

@@ -1,0 +1,59 @@
+<svg width="1280" height="640" viewBox="0 0 1280 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="120" y1="40" x2="1180" y2="600" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#07111F"/>
+      <stop offset="1" stop-color="#102A43"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(290 210) rotate(18) scale(260 210)">
+      <stop stop-color="#22D3EE" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(980 470) rotate(-8) scale(320 220)">
+      <stop stop-color="#14B8A6" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#14B8A6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="wave" x1="160" y1="0" x2="1120" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#67E8F9"/>
+      <stop offset="0.5" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#2DD4BF"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="640" rx="36" fill="url(#bg)"/>
+  <rect x="36" y="36" width="1208" height="568" rx="28" stroke="rgba(255,255,255,0.08)"/>
+  <ellipse cx="290" cy="210" rx="260" ry="210" fill="url(#glowA)"/>
+  <ellipse cx="980" cy="470" rx="320" ry="220" fill="url(#glowB)"/>
+
+  <g opacity="0.15" stroke="#94A3B8">
+    <path d="M120 180H1160"/>
+    <path d="M120 250H1160"/>
+    <path d="M120 320H1160"/>
+    <path d="M120 390H1160"/>
+    <path d="M120 460H1160"/>
+  </g>
+
+  <g fill="none" stroke="url(#wave)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M140 370C185 370 185 256 230 256C275 256 275 430 320 430C365 430 365 214 410 214C455 214 455 392 500 392C545 392 545 280 590 280C635 280 635 446 680 446C725 446 725 228 770 228C815 228 815 364 860 364C905 364 905 310 950 310C995 310 995 420 1040 420C1085 420 1085 266 1130 266" stroke-width="10"/>
+    <path opacity="0.45" d="M140 330C185 330 185 286 230 286C275 286 275 390 320 390C365 390 365 244 410 244C455 244 455 358 500 358C545 358 545 312 590 312C635 312 635 406 680 406C725 406 725 262 770 262C815 262 815 334 860 334C905 334 905 286 950 286C995 286 995 380 1040 380C1085 380 1085 300 1130 300" stroke-width="4"/>
+  </g>
+
+  <g>
+    <circle cx="184" cy="146" r="8" fill="#67E8F9"/>
+    <circle cx="214" cy="146" r="8" fill="#22D3EE" opacity="0.72"/>
+    <circle cx="244" cy="146" r="8" fill="#2DD4BF" opacity="0.56"/>
+  </g>
+
+  <text x="160" y="220" fill="#E2E8F0" font-size="104" font-weight="800" font-family="'Avenir Next', 'Segoe UI', sans-serif" letter-spacing="-2">
+    ace-music
+  </text>
+  <text x="164" y="274" fill="#8FEAF4" font-size="28" font-weight="500" font-family="'Avenir Next', 'Segoe UI', sans-serif" letter-spacing="0.4">
+    contract-driven ai music generation for python workflows
+  </text>
+
+  <g opacity="0.7">
+    <rect x="900" y="130" width="184" height="42" rx="21" fill="rgba(15,23,42,0.36)" stroke="rgba(255,255,255,0.12)"/>
+    <text x="930" y="158" fill="#E2E8F0" font-size="20" font-weight="600" font-family="'Avenir Next', 'Segoe UI', sans-serif">
+      mock • local • cloud
+    </text>
+  </g>
+</svg>

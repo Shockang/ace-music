@@ -2,186 +2,146 @@
 
 ## Overview
 
-This document describes how to validate the ACE-Step music generation pipeline
-between a Mac (client) and a Windows GPU machine (RTX 3090 Ti) connected via
-Tailscale. The pipeline uses SSH for command execution and SMB for file transfer.
+This guide describes how to validate `ace-music` in public, reproducible environments. It focuses on three supported validation lanes:
 
-## Prerequisites
+- mock-mode smoke tests
+- local ACE-Step validation
+- MiniMax API validation
 
-### Mac Side
-- [ ] Tailscale installed and connected
-- [ ] SSH key at `~/.ssh/id_ed25519_win` (or set `ACE_SSH_KEY`)
-- [ ] `shellcheck` for script validation (`brew install shellcheck`)
-- [ ] Python 3.12+
+Use mock mode first. It is the fastest way to verify installation, CLI wiring, and output validation behavior.
 
-### Windows Side
-- [ ] Tailscale installed and connected (IP: `100.69.202.122`)
-- [ ] OpenSSH Server running
-- [ ] NVIDIA driver + CUDA installed
-- [ ] `acestep_generate.py` at `C:/Users/shockang/`
-- [ ] SMB share named `share` pointing to `C:/share`
+## Validation Lanes
 
-## Step 1: Connectivity Check
+| Lane | Goal | Requirements |
+| --- | --- | --- |
+| Mock | verify CLI, output writing, and JSON summaries | Python only |
+| Local ACE-Step | verify local GPU-backed generation | compatible GPU, model dependencies |
+| MiniMax | verify cloud-backed generation | `MINIMAX_API_KEY` |
 
-```bash
-# Test SSH connection
-ssh -i ~/.ssh/id_ed25519_win shockang@100.69.202.122 "echo connected"
+## 1. Mock Smoke Test
 
-# Test Tailscale ping
-tailscale ping 100.69.202.122
-```
-
-Expected: `connected` response, low latency ping.
-
-## Step 2: SMB Mount Check
+Run:
 
 ```bash
-# Check current status
-./scripts/mount_windows_smb.sh status
-
-# Mount if needed
-./scripts/mount_windows_smb.sh mount
-
-# Verify
-ls /Volumes/share/
-```
-
-Expected: SMB share mounted and readable.
-
-## Step 3: GPU Status Check
-
-```bash
-# Human-readable output
-python3 scripts/check_windows_gpu.py
-
-# JSON output (for scripts)
-python3 scripts/check_windows_gpu.py --json
-
-# Custom threshold
-python3 scripts/check_windows_gpu.py --threshold 15
+ace-music generate \
+  --mock \
+  --description "short ambient piano motif" \
+  --duration 5 \
+  --output-dir ./output \
+  --summary-json ./output/mock-summary.json
 ```
 
 Expected:
-- GPU name: `NVIDIA GeForce RTX 3090 Ti`
-- Status: `READY` (VRAM used < 20 GB)
-- Exit code: 0
 
-## Step 4: Quick Test Generation
+- command exits with code `0`
+- a WAV file is written into `./output`
+- `./output/mock-summary.json` contains a `status: success` payload
+
+## 2. Local ACE-Step Validation
+
+Install model extras:
 
 ```bash
-# 10-second test
-./scripts/run_ace_step.sh --test
+pip install -e ".[dev,model]"
+```
 
-# Custom test duration
-./scripts/run_ace_step.sh --test 15
+Run a short local generation:
+
+```bash
+ace-music generate \
+  --description "warm ambient synth with gentle pulse" \
+  --duration 10 \
+  --output-dir ./output \
+  --summary-json ./output/acestep-summary.json
 ```
 
 Expected:
-- Generation completes in under 2 minutes
-- WAV file appears at `/Volumes/share/music_*.wav`
-- File size > 1 KB
 
-## Step 5: Full Generation Test
+- command exits with code `0`
+- generated audio is written into `./output`
+- summary JSON contains `status: success`
+
+If your environment cannot provide CUDA-backed ACE-Step generation yet, use `--mock` until the local model path is ready.
+
+## 3. MiniMax Validation
+
+Export the API key:
 
 ```bash
-./scripts/run_ace_step.sh \
-  --prompt "电子氛围音乐，舒缓节奏" \
-  --duration 30
+export MINIMAX_API_KEY="your-key"
+```
+
+Run a short cloud generation:
+
+```bash
+ace-music generate \
+  --backend minimax \
+  --description "cinematic ambient theme with soft percussion" \
+  --duration 10 \
+  --output-dir ./output \
+  --summary-json ./output/minimax-summary.json
 ```
 
 Expected:
-- Generation completes in under 5 minutes
-- Output: 30 +/- 5 second WAV file
-- Sample rate: 48000 Hz
 
-## Step 6: Verify Output
+- command exits with code `0`
+- an audio file is written into `./output`
+- summary JSON contains `status: success`
+
+## 4. Validate Existing Audio
+
+Run:
 
 ```bash
-# Check file exists and has content
-ls -la /Volumes/share/music_*.wav
-
-# Verify format
-file /Volumes/share/music_*.wav
-
-# Check duration (requires ffprobe)
-ffprobe /Volumes/share/music_*.wav 2>&1 | grep Duration
+ace-music validate ./output/example.wav \
+  --expected-sample-rate 48000 \
+  --expected-duration 30 \
+  --duration-tolerance 5
 ```
 
 Expected:
-- `file` output: `RIFF (little-endian) data, WAVE audio`
-- Duration: approximately 30 seconds
 
-## Success Criteria
+- command exits with code `0` for valid audio
+- output JSON includes `validation` details such as duration and sample rate checks
 
-| Criterion | Target |
-|-----------|--------|
-| SMB share accessible | `/Volumes/share` mounted |
-| GPU VRAM available | < 20 GB used |
-| Test generation (10s) | < 2 minutes total |
-| Full generation (30s) | < 5 minutes total |
-| Output duration | 30 +/- 5 seconds |
-| Output format | WAV, 48000 Hz |
-| File transfer | Appears via SMB |
+## 5. Output Checks
+
+For generated or imported outputs, verify:
+
+- file exists and is non-empty
+- reported duration is within tolerance
+- sample rate matches expectations
+- summary JSON is written when `--summary-json` is passed
 
 ## Troubleshooting
 
-### SSH Connection Refused
-```bash
-# Check Tailscale status
-tailscale status
+### `ace-music` command not found
 
-# Verify Windows SSH server is running
-# On Windows: Get-Service sshd
+Activate the virtual environment and reinstall:
+
+```bash
+source .venv/bin/activate
+pip install -e ".[dev]"
 ```
 
-### SMB Mount Fails
-```bash
-# Try manual mount
-mount_smbfs //shockang@100.69.202.122/share /Volumes/share
+### Local ACE-Step generation fails because CUDA is unavailable
 
-# Check Windows firewall allows SMB (port 445)
+Use mock mode first:
+
+```bash
+ace-music generate --mock --description "test" --duration 5
 ```
 
-### GPU Not Ready
-```bash
-# Check what is using GPU
-python3 scripts/check_windows_gpu.py --json
+Then verify your local model and CUDA setup separately before retrying production generation.
 
-# On Windows, list GPU processes:
-# nvidia-smi --query-compute-apps=pid,name,used_memory --format=csv
+### MiniMax generation fails with an API-key error
+
+Confirm that `MINIMAX_API_KEY` is exported in the current shell:
+
+```bash
+echo "${MINIMAX_API_KEY:+set}"
 ```
 
-### Generation Timeout
-```bash
-# Increase timeout
-./scripts/run_ace_step.sh --prompt "..." --duration 30 --timeout 600
+### Output validation fails
 
-# Skip GPU check if false positive
-./scripts/run_ace_step.sh --prompt "..." --duration 30 --skip-gpu-check
-```
-
-### File Not Found After Generation
-```bash
-# The file may still be writing. Wait and check:
-ls -la /Volumes/share/music_*.wav
-
-# Check Windows output directly:
-ssh -i ~/.ssh/id_ed25519_win shockang@100.69.202.122 "dir C:\\share\\music_*.wav"
-```
-
-## Environment Variables
-
-All scripts respect these environment variables for configuration:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ACE_WINDOWS_HOST` | `100.69.202.122` | Windows GPU machine IP |
-| `ACE_WINDOWS_USER` | `shockang` | SSH username |
-| `ACE_SSH_KEY` | `~/.ssh/id_ed25519_win` | SSH private key path |
-| `ACE_SSH_PORT` | `22` | SSH port |
-| `ACE_SMB_SHARE` | `share` | SMB share name |
-| `ACE_MOUNT_POINT` | `/Volumes/share` | Local mount point |
-| `ACE_SCRIPT_DIR` | `C:/Users/shockang` | Windows ACE-Step script dir |
-| `ACE_OUTPUT_DIR` | `C:/share` | Windows output directory |
-| `ACE_TIMEOUT` | `300` | Default SSH timeout (seconds) |
-| `ACE_GPU_THRESHOLD` | `20` | VRAM threshold (GB) |
+Use the `validate` command to inspect duration and sample-rate mismatches, then compare the summary JSON against the file on disk.

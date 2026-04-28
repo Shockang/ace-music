@@ -1,4 +1,4 @@
-"""Basic usage example for ace-music."""
+"""Basic public usage examples for ace-music."""
 
 import asyncio
 
@@ -52,7 +52,7 @@ In this city of extremes""",
     )
     print(f"Output: {result2.audio_path}")
 
-    # Example 3: DirectorBridge integration
+    # Example 3: Scene-oriented bridge integration
     print("\n=== DirectorBridge integration ===")
     from ace_music.bridge import DirectorBridge
     from ace_music.bridge.director_bridge import request_to_pipeline_input

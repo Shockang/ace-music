@@ -1,0 +1,52 @@
+name: Bug report
+description: Report a reproducible bug in the public package surface
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, and install method
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command or code sample
+      description: Exact CLI command or Python snippet
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or traceback
+  - type: dropdown
+    id: mock_repro
+    attributes:
+      label: Does it reproduce with --mock?
+      options:
+        - "Yes"
+        - "No"
+        - "Not tested"
+    validations:
+      required: true

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Usage Questions and Support
+    url: https://github.com/Shockang/ace-music/discussions
+    about: Ask setup and usage questions here.

@@ -1,9 +1,8 @@
-"""DirectorBridge: standardized interface for auto-director integration.
+"""DirectorBridge: standardized scene-to-music integration contract.
 
-This module provides the bridge between ace-music and auto-director's
-video export pipeline. auto-director's ExportWorker can request music
-tracks via DirectorBridge.Request and receive audio + metadata via
-DirectorBridge.Response.
+This module provides a public request/response contract for orchestration
+systems that need to request music tracks and receive generated audio plus
+metadata in return.
 """
 
 from __future__ import annotations
@@ -12,14 +11,14 @@ from pydantic import BaseModel, Field
 
 
 class DirectorBridge(BaseModel):
-    """auto-director <-> ace-music standardized interface."""
+    """Public orchestration <-> ace-music standardized interface."""
 
     version: str = "1.0"
 
     class Request(BaseModel):
-        """auto-director -> ace-music: request a music track for a scene."""
+        """External orchestrator -> ace-music scene-oriented music request."""
 
-        scene_id: str = Field(description="Unique scene identifier from auto-director")
+        scene_id: str = Field(description="Unique scene identifier from the calling system")
         mood: str = Field(description="Emotional mood tag (e.g. 'melancholic', 'upbeat')")
         duration_seconds: float = Field(ge=5.0, le=240.0, description="Target duration")
         style_reference: str | None = Field(
@@ -71,7 +70,7 @@ class DirectorBridge(BaseModel):
         )
 
     class Response(BaseModel):
-        """ace-music -> auto-director: generated audio result."""
+        """ace-music -> external orchestrator generated audio result."""
 
         audio_path: str = Field(description="Path to the generated audio file")
         duration_seconds: float = Field(description="Actual duration of the audio")

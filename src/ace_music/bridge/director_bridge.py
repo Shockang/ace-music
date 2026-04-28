@@ -1,7 +1,7 @@
-"""DirectorBridge: auto-director integration adapter.
+"""DirectorBridge adapter helpers.
 
-Converts DirectorBridge.Request into PipelineInput and
-PipelineOutput into DirectorBridge.Response.
+Converts `DirectorBridge.Request` into `PipelineInput` and
+`PipelineOutput` into `DirectorBridge.Response`.
 """
 
 from ace_music.bridge import DirectorBridge
@@ -15,7 +15,7 @@ from ace_music.schemas.pipeline import PipelineInput, PipelineOutput
 
 
 def request_to_pipeline_input(req: DirectorBridge.Request) -> PipelineInput:
-    """Convert a DirectorBridge.Request to PipelineInput."""
+    """Convert a scene-oriented bridge request into pipeline input."""
     description_parts: list[str] = []
     if req.style_reference:
         description_parts.append(req.style_reference)
@@ -76,7 +76,7 @@ def request_to_pipeline_input(req: DirectorBridge.Request) -> PipelineInput:
 def pipeline_output_to_response(
     output: PipelineOutput, req: DirectorBridge.Request
 ) -> DirectorBridge.Response:
-    """Convert PipelineOutput to DirectorBridge.Response."""
+    """Convert pipeline output back into the public bridge response."""
     return DirectorBridge.Response(
         audio_path=output.audio_path,
         duration_seconds=output.duration_seconds,
