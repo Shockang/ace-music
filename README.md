@@ -6,7 +6,7 @@
 ![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-06b6d4.svg)
 
-![ace-music banner](assets/readme-banner.svg)
+![ace-music banner](assets/ace-music.png)
 
 Contract-driven AI music generation for Python workflows, automation pipelines, and scene-oriented soundtrack generation.
 

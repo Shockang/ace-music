@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-![ace-music banner](assets/readme-banner.svg)
+![ace-music banner](assets/ace-music.png)
 
 面向 Python 工作流、自动化流水线和场景化配乐生成的契约驱动式 AI 音乐生成工具。
 
