@@ -92,12 +92,12 @@ Expected:
 
 ## 4. Validate Existing Audio
 
-Run:
+Run against a generated WAV:
 
 ```bash
-ace-music validate ./output/example.wav \
+ace-music validate ./output/path-to-generated.wav \
   --expected-sample-rate 48000 \
-  --expected-duration 30 \
+  --expected-duration 5 \
   --duration-tolerance 5
 ```
 
@@ -114,6 +114,14 @@ For generated or imported outputs, verify:
 - reported duration is within tolerance
 - sample rate matches expectations
 - summary JSON is written when `--summary-json` is passed
+
+For CI, the recommended sequence is:
+
+1. install the package in editable mode
+2. run Ruff
+3. run pytest
+4. run a mock generation smoke test
+5. run `validate` against the generated WAV
 
 ## Troubleshooting
 

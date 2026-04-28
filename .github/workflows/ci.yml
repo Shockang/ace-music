@@ -16,6 +16,7 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]"
-      - run: ruff check --format=github src tests examples
+      - run: ruff check --output-format=github src tests examples
       - run: pytest -q
       - run: ace-music generate --mock --description "ci smoke track" --duration 5 --output-dir ./ci-output --summary-json ./ci-output/summary.json
+      - run: ace-music validate ./ci-output/ci_smoke_track/*/*.wav --expected-sample-rate 48000 --expected-duration 5 --duration-tolerance 5
