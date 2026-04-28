@@ -52,13 +52,13 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-本地 ACE-Step 模型支持：
+可选的 GPU 相关依赖：
 
 ```bash
 pip install -e ".[dev,model]"
 ```
 
-`.[model]` 主要面向本地 GPU 生成，因此不会进入公共 CI。
+`.[model]` 只安装本项目侧需要的 Python GPU/音频依赖。ACE-Step 运行时本身仍然需要你在目标机器上单独安装和配置，因此这个 extra 不会进入公共 CI。
 
 ## 运行模式
 
@@ -81,12 +81,12 @@ ace-music generate \
   --summary-json ./output/run.json
 ```
 
-校验已有文件：
+直接校验生成出来的 WAV：
 
 ```bash
-ace-music validate ./output/example.wav \
+ace-music validate ./output/path-to-generated.wav \
   --expected-sample-rate 48000 \
-  --expected-duration 30 \
+  --expected-duration 10 \
   --duration-tolerance 5
 ```
 
@@ -146,7 +146,7 @@ pip install -e ".[dev]"
 
 ### CUDA 或 GPU 不可用
 
-烟雾测试请使用 `--mock`。如果要运行本地 ACE-Step，请安装 `.[model]` 并在支持 CUDA 的机器上执行。
+烟雾测试请使用 `--mock`。如果要运行本地 ACE-Step，请安装 `.[model]`、单独配置 ACE-Step 运行时，并在支持 CUDA 的机器上执行。
 
 ### 缺少 `MINIMAX_API_KEY`
 
@@ -155,6 +155,8 @@ pip install -e ".[dev]"
 ```bash
 export MINIMAX_API_KEY="your-key"
 ```
+
+在 macOS 上，CLI 会对云端生成路径使用 `spawn` worker 上下文，以避免某些 Objective-C 相关库在 `fork()` 后崩溃。
 
 ### mock 模式和生产结果差异很大
 

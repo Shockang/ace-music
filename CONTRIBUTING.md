@@ -8,13 +8,13 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-For local ACE-Step work, install the optional GPU dependencies separately:
+For local ACE-Step work, install the optional GPU-oriented dependencies separately:
 
 ```bash
 pip install -e ".[dev,model]"
 ```
 
-The `.[model]` extra is intended for local GPU-backed generation and is intentionally excluded from public CI.
+The `.[model]` extra is intended for local GPU-backed generation and is intentionally excluded from public CI. It does not install the ACE-Step runtime itself; that must be provisioned separately on contributor machines that work on the local backend.
 
 ## Quality Gates
 

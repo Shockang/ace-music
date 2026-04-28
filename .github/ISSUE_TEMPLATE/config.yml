@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Usage Questions and Support
-    url: https://github.com/Shockang/ace-music/discussions
-    about: Ask setup and usage questions here.
+    url: https://github.com/Shockang/ace-music/blob/main/SUPPORT.md
+    about: Start with the support guide and open an issue if the docs do not answer your question.

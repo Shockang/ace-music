@@ -147,8 +147,9 @@ class ACEStepGenerator(MusicTool[GenerationInput, AudioOutput]):
                 self._pipeline = "mock"
             else:
                 raise DependencyUnavailableError(
-                    "ACE-Step is not installed. Install ACE-Step/model dependencies for production "
-                    "generation, or pass mock mode explicitly for smoke tests."
+                    "ACE-Step runtime is not installed or not importable. Install/configure the "
+                    "ACE-Step runtime separately, add this project's `.[model]` dependencies for "
+                    "local GPU generation, or pass mock mode explicitly for smoke tests."
                 ) from None
 
         return self._pipeline

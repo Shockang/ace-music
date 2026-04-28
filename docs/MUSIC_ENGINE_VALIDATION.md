@@ -39,11 +39,13 @@ Expected:
 
 ## 2. Local ACE-Step Validation
 
-Install model extras:
+Install the optional GPU-oriented extras:
 
 ```bash
 pip install -e ".[dev,model]"
 ```
+
+These extras do not install the ACE-Step runtime itself. Treat ACE-Step as an external prerequisite that must already be available on the machine before attempting local backend validation.
 
 Run a short local generation:
 
@@ -61,7 +63,7 @@ Expected:
 - generated audio is written into `./output`
 - summary JSON contains `status: success`
 
-If your environment cannot provide CUDA-backed ACE-Step generation yet, use `--mock` until the local model path is ready.
+If your environment cannot provide a configured ACE-Step runtime plus CUDA-backed execution yet, use `--mock` until the local model path is ready.
 
 ## 3. MiniMax Validation
 

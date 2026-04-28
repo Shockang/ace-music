@@ -56,13 +56,13 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-Local ACE-Step model support:
+Optional GPU-oriented dependencies:
 
 ```bash
 pip install -e ".[dev,model]"
 ```
 
-`.[model]` is intended for GPU-backed local generation and is intentionally excluded from CI.
+`.[model]` installs the Python-side GPU/audio dependencies used by this project. The ACE-Step runtime itself is still an external prerequisite and must be installed/configured separately on the target machine. This extra is intentionally excluded from CI.
 
 ## Runtime Modes
 
@@ -85,12 +85,12 @@ ace-music generate \
   --summary-json ./output/run.json
 ```
 
-Validate an existing file:
+Validate a generated WAV directly:
 
 ```bash
-ace-music validate ./output/example.wav \
+ace-music validate ./output/path-to-generated.wav \
   --expected-sample-rate 48000 \
-  --expected-duration 30 \
+  --expected-duration 10 \
   --duration-tolerance 5
 ```
 
@@ -150,7 +150,7 @@ pip install -e ".[dev]"
 
 ### CUDA or GPU unavailable
 
-Use `--mock` for smoke tests. For local ACE-Step generation, install `.[model]` and run on a machine with supported CUDA tooling.
+Use `--mock` for smoke tests. For local ACE-Step generation, install `.[model]`, install/configure the ACE-Step runtime separately, and run on a machine with supported CUDA tooling.
 
 ### `MINIMAX_API_KEY` missing
 
@@ -159,6 +159,8 @@ Export the key before using the MiniMax backend:
 ```bash
 export MINIMAX_API_KEY="your-key"
 ```
+
+On macOS, the CLI uses a `spawn` worker context for cloud generation to avoid `fork()` crashes in subprocesses that initialize Objective-C-backed libraries.
 
 ### Mock mode does not match production quality
 

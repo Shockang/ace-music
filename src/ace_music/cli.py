@@ -9,6 +9,7 @@ import logging
 import multiprocessing
 import os
 import queue
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -122,6 +123,8 @@ async def _run_generate(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
 
 
 def _child_context_name() -> str:
+    if sys.platform == "darwin":
+        return "spawn"
     return "fork" if hasattr(os, "fork") and os.name != "nt" else "spawn"
 
 

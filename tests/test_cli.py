@@ -4,6 +4,9 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
+
+from ace_music import cli
 
 
 def test_cli_help_exits_successfully():
@@ -85,3 +88,8 @@ def test_cli_generation_timeout_returns_structured_error(tmp_path):
     summary = json.loads(summary_path.read_text())
     assert summary["status"] == "failed"
     assert summary["category"] == "timeout"
+
+
+def test_child_context_name_uses_spawn_on_darwin():
+    with patch.object(cli.sys, "platform", "darwin"):
+        assert cli._child_context_name() == "spawn"
