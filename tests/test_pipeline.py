@@ -187,6 +187,56 @@ class TestMusicAgentPipeline:
         assert len(results) == 2
         assert all(result.audio_path for result in results)
 
+    @pytest.mark.asyncio
+    async def test_run_sequence_applies_sequence_guidance_to_pipeline(self, tmp_path):
+        agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
+        captured_guidance: list[float] = []
+
+        async def fake_run(input_data, workspace=None, run_id=None):
+            captured_guidance.append(input_data.guidance_scale)
+            return PipelineOutput(
+                audio_path=str(tmp_path / f"{len(captured_guidance)}.wav"),
+                duration_seconds=5.0,
+                format="wav",
+                sample_rate=48000,
+                metadata={},
+            )
+
+        agent.run = fake_run  # type: ignore[method-assign]
+
+        inputs = [
+            PipelineInput(
+                description="scene one",
+                duration_seconds=5.0,
+                output_dir=str(tmp_path / "a"),
+                audio_contract=AudioSceneContract(
+                    scene_id="s1",
+                    duration_seconds=5.0,
+                    mood="calm",
+                    arousal=0.1,
+                    intensity=0.2,
+                ),
+            ),
+            PipelineInput(
+                description="scene two",
+                duration_seconds=5.0,
+                output_dir=str(tmp_path / "b"),
+                audio_contract=AudioSceneContract(
+                    scene_id="s2",
+                    duration_seconds=5.0,
+                    mood="intense",
+                    arousal=0.9,
+                    intensity=0.9,
+                ),
+            ),
+        ]
+
+        await agent.run_sequence(inputs)
+
+        assert captured_guidance[0] is not None
+        assert captured_guidance[1] is not None
+        assert captured_guidance[1] <= captured_guidance[0] + 1.0
+
 
 class TestDirectorBridge:
     def test_request_to_pipeline_input(self):

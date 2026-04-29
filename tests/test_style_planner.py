@@ -175,3 +175,25 @@ class TestSequencePlanning:
 
         assert len(outputs) == 3
         assert outputs[1].guidance_scale <= outputs[2].guidance_scale
+
+    def test_plan_sequence_biases_lower_energy_side_for_opposing_moods(self, planner):
+        contracts = [
+            AudioSceneContract(
+                scene_id="s1",
+                duration_seconds=5.0,
+                mood="dark",
+                arousal=0.2,
+                intensity=0.2,
+            ),
+            AudioSceneContract(
+                scene_id="s2",
+                duration_seconds=5.0,
+                mood="upbeat",
+                arousal=0.9,
+                intensity=0.9,
+            ),
+        ]
+
+        outputs = planner.plan_sequence(contracts)
+
+        assert "moderate" in outputs[0].prompt or "neutral" in outputs[0].prompt

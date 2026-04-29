@@ -588,7 +588,10 @@ class MusicAgent:
         for input_data, style_output in zip(inputs, style_outputs, strict=True):
             result = await self.run(
                 input_data.model_copy(
-                    update={"style_tags": style_output.prompt.split(", ")}
+                    update={
+                        "style_tags": style_output.prompt.split(", "),
+                        "guidance_scale": style_output.guidance_scale,
+                    }
                 ),
                 workspace=workspace,
             )

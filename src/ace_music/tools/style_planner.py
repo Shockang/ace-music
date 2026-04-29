@@ -199,13 +199,16 @@ class StylePlanner(MusicTool[StyleInput, StyleOutput]):
             previous_mood = (contracts[idx - 1].mood or "").strip().lower()
             current_mood = (contracts[idx].mood or "").strip().lower()
             if (previous_mood, current_mood) in opposing_pairs:
-                current_prompt_tags = outputs[idx].prompt.split(", ")
+                previous_energy = contracts[idx - 1].arousal or 0.0
+                current_energy = contracts[idx].arousal or 0.0
+                target_idx = idx - 1 if previous_energy <= current_energy else idx
+                prompt_tags = outputs[target_idx].prompt.split(", ")
                 filtered_tags = [
-                    tag for tag in current_prompt_tags if tag not in {"upbeat", "dark", "intense"}
+                    tag for tag in prompt_tags if tag not in {"upbeat", "dark", "intense"}
                 ]
-                if "moderate" not in filtered_tags:
+                if "moderate" not in filtered_tags and "neutral" not in filtered_tags:
                     filtered_tags.append("moderate")
-                outputs[idx] = outputs[idx].model_copy(
+                outputs[target_idx] = outputs[target_idx].model_copy(
                     update={"prompt": ", ".join(filtered_tags)}
                 )
 
