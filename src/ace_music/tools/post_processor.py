@@ -180,7 +180,6 @@ class PostProcessor(MusicTool[PostProcessInput, ProcessedAudio]):
                 else:
                     peak_db = 20.0 * np.log10(new_peak) if new_peak > 0 else -float("inf")
 
-                loudness_lufs = input_data.target_lufs
                 logger.info(
                     "LUFS normalized: %.1f -> %.1f LUFS (gain %.1f dB)",
                     current_lufs,
@@ -222,15 +221,14 @@ class PostProcessor(MusicTool[PostProcessInput, ProcessedAudio]):
 
         duration = len(data) / sr
 
-        # Re-measure LUFS if pyloudnorm is available (captures final state after ducking)
-        if loudness_lufs is None:
-            try:
-                import pyloudnorm as pyln
+        # Re-measure LUFS if pyloudnorm is available so metadata reflects final post-ducking audio.
+        try:
+            import pyloudnorm as pyln
 
-                meter = pyln.Meter(sr)
-                loudness_lufs = meter.integrated_loudness(data)
-            except ImportError:
-                pass
+            meter = pyln.Meter(sr)
+            loudness_lufs = meter.integrated_loudness(data)
+        except ImportError:
+            pass
 
         return ProcessedAudio(
             file_path=str(out_path),

@@ -1,6 +1,9 @@
 """Tests for PostProcessor."""
 
 import os
+import sys
+import types
+from pathlib import Path
 
 import pytest
 
@@ -392,6 +395,90 @@ class TestDuckingHelpers:
         )
 
         assert gap_rms > ducked_rms * 1.2
+
+
+class TestLoudnessMetadata:
+    def test_post_ducking_requires_remeasured_loudness(self):
+        np = pytest.importorskip("numpy")
+
+        processor = PostProcessor()
+        sample_rate = 48000
+        duration = 5.0
+        data = np.full((int(sample_rate * duration), 2), 0.5, dtype=np.float32)
+        contract = AudioSceneContract(
+            scene_id="scene_lufs",
+            duration_seconds=duration,
+            mood="calm",
+            tts_segments=[TTSSegment(start_seconds=0.2, end_seconds=0.4)],
+        )
+
+        processed = processor._apply_ducking(data.copy(), sample_rate, contract)
+        baseline_rms = np.sqrt(np.mean(data**2))
+        ducked_rms = np.sqrt(np.mean(processed**2))
+
+        assert ducked_rms < baseline_rms
+
+    def test_process_with_soundfile_remeasures_loudness_after_ducking(
+        self, tmp_path, monkeypatch
+    ):
+        np = pytest.importorskip("numpy")
+
+        sample_rate = 48000
+        duration = 5.0
+        data = np.ones((int(sample_rate * duration), 2), dtype=np.float32)
+        written: dict[str, np.ndarray] = {}
+
+        def fake_read(_path):
+            return data.copy(), sample_rate
+
+        def fake_write(path, processed_data, _sr):
+            written["data"] = processed_data
+            Path(path).write_bytes(b"")
+
+        class FakeMeter:
+            def __init__(self, _sr):
+                pass
+
+            def integrated_loudness(self, processed_data):
+                return float(np.mean(np.abs(processed_data)))
+
+        monkeypatch.setitem(
+            sys.modules,
+            "soundfile",
+            types.SimpleNamespace(read=fake_read, write=fake_write),
+        )
+        monkeypatch.setitem(
+            sys.modules,
+            "pyloudnorm",
+            types.SimpleNamespace(Meter=FakeMeter),
+        )
+
+        processor = PostProcessor()
+        contract = AudioSceneContract(
+            scene_id="scene_lufs",
+            duration_seconds=duration,
+            mood="calm",
+        )
+        result = processor._process_with_soundfile(
+            PostProcessInput(
+                audio=AudioOutput(
+                    file_path=str(tmp_path / "input.wav"),
+                    duration_seconds=duration,
+                    sample_rate=sample_rate,
+                    format="wav",
+                    channels=2,
+                ),
+                target_format="wav",
+                normalize_loudness=True,
+                target_lufs=0.0,
+                trim_silence=False,
+                output_dir=str(tmp_path),
+                audio_contract=contract,
+            )
+        )
+
+        expected_loudness = float(np.mean(np.abs(written["data"])))
+        assert result.loudness_lufs == pytest.approx(expected_loudness)
 
 
 class TestInputValidation:
