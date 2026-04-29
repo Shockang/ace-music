@@ -3,7 +3,11 @@
 import pytest
 from pydantic import ValidationError
 
-from ace_music.schemas.audio_contract import AudioSceneContract, AudioSegmentCue
+from ace_music.schemas.audio_contract import (
+    AudioSceneContract,
+    AudioSegmentCue,
+    TTSSegment,
+)
 from ace_music.tools.emotion_mapper import map_scene_contract
 
 
@@ -119,6 +123,14 @@ def test_audio_segment_cue_rejects_invalid_range():
         )
 
 
+def test_tts_segment_rejects_invalid_range():
+    with pytest.raises(ValidationError):
+        TTSSegment(
+            start_seconds=2.0,
+            end_seconds=2.0,
+        )
+
+
 def test_audio_scene_contract_rejects_overlapping_segments():
     with pytest.raises(ValidationError, match="must not overlap"):
         AudioSceneContract(
@@ -136,6 +148,44 @@ def test_audio_scene_contract_rejects_overlapping_segments():
                     start_seconds=10.0,
                     end_seconds=20.0,
                 ),
+            ],
+        )
+
+
+def test_audio_scene_contract_rejects_overlapping_tts_segments():
+    with pytest.raises(ValidationError, match="tts_segments must not overlap"):
+        AudioSceneContract(
+            scene_id="scene_tts_overlap",
+            duration_seconds=10.0,
+            mood="tense",
+            tts_segments=[
+                TTSSegment(start_seconds=0.0, end_seconds=2.0),
+                TTSSegment(start_seconds=1.5, end_seconds=3.0),
+            ],
+        )
+
+
+def test_audio_scene_contract_rejects_unordered_tts_segments():
+    with pytest.raises(ValidationError, match="tts_segments must be ordered"):
+        AudioSceneContract(
+            scene_id="scene_tts_order",
+            duration_seconds=10.0,
+            mood="tense",
+            tts_segments=[
+                TTSSegment(start_seconds=3.0, end_seconds=4.0),
+                TTSSegment(start_seconds=1.0, end_seconds=2.0),
+            ],
+        )
+
+
+def test_audio_scene_contract_rejects_tts_segment_beyond_scene_duration():
+    with pytest.raises(ValidationError, match="tts_segments end_seconds must be <="):
+        AudioSceneContract(
+            scene_id="scene_tts_overflow",
+            duration_seconds=10.0,
+            mood="tense",
+            tts_segments=[
+                TTSSegment(start_seconds=9.0, end_seconds=10.5),
             ],
         )
 

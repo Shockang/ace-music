@@ -63,6 +63,74 @@ class PostProcessor(MusicTool[PostProcessInput, ProcessedAudio]):
             return input_data
         return input_data.model_copy(update=updates)
 
+    def _build_ducking_envelope(
+        self,
+        sample_count: int,
+        sr: int,
+        contract: AudioSceneContract,
+    ) -> Any:
+        """Build a vectorized ducking envelope for TTS windows."""
+        import numpy as np
+
+        envelope = np.ones(sample_count, dtype=np.float32)
+        duck_gain = 10 ** (-contract.mix.ducking_db / 20.0)
+        fade_samples = max(1, int(sr * 0.05))
+
+        for segment in contract.tts_segments:
+            start = min(sample_count, int(segment.start_seconds * sr))
+            end = min(sample_count, int(segment.end_seconds * sr))
+            if start >= end:
+                continue
+            segment_length = end - start
+            segment_fade = min(fade_samples, max(1, segment_length // 2))
+
+            if segment_length <= 2 * segment_fade:
+                midpoint = segment_length // 2
+                down_len = max(1, midpoint)
+                up_len = max(1, segment_length - midpoint)
+                local = np.ones(segment_length, dtype=np.float32)
+                local[:down_len] = np.linspace(1.0, duck_gain, down_len, endpoint=False)
+                local[-up_len:] = np.linspace(duck_gain, 1.0, up_len, endpoint=False)
+                if segment_length > down_len + up_len:
+                    local[down_len:-up_len] = duck_gain
+                envelope[start:end] = local
+                continue
+
+            ramp_down_end = start + segment_fade
+            ramp_up_start = end - segment_fade
+
+            envelope[start:ramp_down_end] = np.linspace(
+                1.0,
+                duck_gain,
+                segment_fade,
+                endpoint=False,
+            )
+            envelope[ramp_down_end:ramp_up_start] = duck_gain
+            envelope[ramp_up_start:end] = np.linspace(
+                duck_gain,
+                1.0,
+                segment_fade,
+                endpoint=False,
+            )
+
+        return envelope
+
+    def _apply_ducking(self, data: Any, sr: int, contract: AudioSceneContract) -> Any:
+        """Apply dynamic or static ducking based on the contract."""
+        mix = contract.mix
+        layers = contract.layers
+        if not layers or not layers.tts_present or mix.sidechain_source != "tts":
+            return data
+
+        if contract.tts_segments:
+            envelope = self._build_ducking_envelope(len(data), sr, contract)
+            if data.ndim == 2:
+                return data * envelope[:, None]
+            return data * envelope
+
+        ducking_gain = 10 ** (-mix.ducking_db / 20.0)
+        return data * ducking_gain
+
     def _process_with_soundfile(self, input_data: PostProcessInput) -> ProcessedAudio:
         """Process audio using soundfile + numpy (with optional LUFS normalization)."""
         import numpy as np
@@ -122,20 +190,24 @@ class PostProcessor(MusicTool[PostProcessInput, ProcessedAudio]):
                 data = data * (target_peak / peak)
                 peak_db = -1.0
 
-        # Apply static ducking if TTS is present and sidechain is configured
         if input_data.audio_contract and input_data.audio_contract.mix:
             mix = input_data.audio_contract.mix
             layers = input_data.audio_contract.layers
             if layers and layers.tts_present and mix.sidechain_source == "tts":
-                ducking_db = mix.ducking_db
-                ducking_gain = 10 ** (-ducking_db / 20.0)
-                data = data * ducking_gain
-                peak_db -= ducking_db
-                logger.info(
-                    "Static ducking applied: -%.1f dB (TTS present, sidechain=%s)",
-                    ducking_db,
-                    mix.sidechain_source,
-                )
+                data = self._apply_ducking(data, sr, input_data.audio_contract)
+                peak = np.max(np.abs(data)) if len(data) > 0 else 0.0
+                peak_db = 20.0 * np.log10(peak) if peak > 0 else -float("inf")
+                if input_data.audio_contract.tts_segments:
+                    logger.info(
+                        "Dynamic ducking applied to %d TTS segments",
+                        len(input_data.audio_contract.tts_segments),
+                    )
+                else:
+                    logger.info(
+                        "Static ducking applied: -%.1f dB (TTS present, sidechain=%s)",
+                        mix.ducking_db,
+                        mix.sidechain_source,
+                    )
 
         # Determine output path
         out_dir = Path(input_data.output_dir or Path(input_data.audio.file_path).parent)

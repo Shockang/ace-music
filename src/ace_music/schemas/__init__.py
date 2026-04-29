@@ -8,6 +8,7 @@ from .audio_contract import (
     AudioSegmentCue,
     MixPolicy,
     TransitionPolicy,
+    TTSSegment,
 )
 from .lyrics import LyricSegment, LyricsInput, LyricsOutput, SegmentType
 from .material import MaterialContext, MaterialEntry, MaterialSource
@@ -45,5 +46,6 @@ __all__ = [
     "StyleInput",
     "StyleOutput",
     "StylePreset",
+    "TTSSegment",
     "TransitionPolicy",
 ]

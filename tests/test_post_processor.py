@@ -5,6 +5,7 @@ import os
 import pytest
 
 from ace_music.schemas.audio import AudioOutput, ProcessedAudio
+from ace_music.schemas.audio_contract import AudioSceneContract, TTSSegment
 from ace_music.tools.post_processor import PostProcessInput, PostProcessor
 
 
@@ -80,6 +81,215 @@ class TestMockProcessing:
         result = await processor.execute(inp)
         assert os.path.exists(result.file_path)
         assert result.peak_db == -1.0  # normalized to -1 dB
+
+    @pytest.mark.asyncio
+    async def test_dynamic_ducking_only_hits_tts_ranges(self, tmp_path):
+        np = pytest.importorskip("numpy")
+        sf = pytest.importorskip("soundfile")
+
+        filepath = tmp_path / "dynamic.wav"
+        sample_rate = 48000
+        duration = 1.0
+        data = np.full((int(sample_rate * duration), 2), 0.5, dtype=np.float32)
+        sf.write(filepath, data, sample_rate)
+
+        audio = AudioOutput(
+            file_path=str(filepath),
+            duration_seconds=duration,
+            sample_rate=sample_rate,
+            format="wav",
+            channels=2,
+        )
+        contract = AudioSceneContract(
+            scene_id="scene_dynamic",
+            duration_seconds=duration,
+            mood="calm",
+            tts_segments=[TTSSegment(start_seconds=0.2, end_seconds=0.4)],
+        )
+
+        processor = PostProcessor()
+        result = await processor.execute(
+            PostProcessInput(
+                audio=audio,
+                target_format="wav",
+                normalize_loudness=False,
+                trim_silence=False,
+                output_dir=str(tmp_path / "output"),
+                audio_contract=contract,
+            )
+        )
+
+        processed, _ = sf.read(result.file_path)
+        pre_rms = np.sqrt(np.mean(processed[: int(0.15 * sample_rate)] ** 2))
+        ducked_rms = np.sqrt(
+            np.mean(processed[int(0.25 * sample_rate) : int(0.35 * sample_rate)] ** 2)
+        )
+        post_rms = np.sqrt(np.mean(processed[int(0.6 * sample_rate) :] ** 2))
+
+        assert ducked_rms < pre_rms * 0.7
+        assert post_rms == pytest.approx(pre_rms, rel=0.05)
+
+    @pytest.mark.asyncio
+    async def test_empty_tts_segments_falls_back_to_static_ducking(self, tmp_path):
+        np = pytest.importorskip("numpy")
+        sf = pytest.importorskip("soundfile")
+
+        filepath = tmp_path / "static.wav"
+        sample_rate = 48000
+        duration = 1.0
+        data = np.full((int(sample_rate * duration), 2), 0.5, dtype=np.float32)
+        sf.write(filepath, data, sample_rate)
+
+        audio = AudioOutput(
+            file_path=str(filepath),
+            duration_seconds=duration,
+            sample_rate=sample_rate,
+            format="wav",
+            channels=2,
+        )
+        contract = AudioSceneContract(
+            scene_id="scene_static",
+            duration_seconds=duration,
+            mood="calm",
+        )
+
+        processor = PostProcessor()
+        result = await processor.execute(
+            PostProcessInput(
+                audio=audio,
+                target_format="wav",
+                normalize_loudness=False,
+                trim_silence=False,
+                output_dir=str(tmp_path / "output_static"),
+                audio_contract=contract,
+            )
+        )
+
+        processed, _ = sf.read(result.file_path)
+        rms = np.sqrt(np.mean(processed**2))
+        assert rms < 0.5 * 0.7
+
+    @pytest.mark.asyncio
+    async def test_dynamic_ducking_uses_50ms_crossfade(self, tmp_path):
+        np = pytest.importorskip("numpy")
+        sf = pytest.importorskip("soundfile")
+
+        filepath = tmp_path / "crossfade.wav"
+        sample_rate = 48000
+        duration = 1.0
+        data = np.full((int(sample_rate * duration), 2), 0.5, dtype=np.float32)
+        sf.write(filepath, data, sample_rate)
+
+        audio = AudioOutput(
+            file_path=str(filepath),
+            duration_seconds=duration,
+            sample_rate=sample_rate,
+            format="wav",
+            channels=2,
+        )
+        contract = AudioSceneContract(
+            scene_id="scene_crossfade",
+            duration_seconds=duration,
+            mood="calm",
+            tts_segments=[TTSSegment(start_seconds=0.2, end_seconds=0.4)],
+        )
+
+        processor = PostProcessor()
+        result = await processor.execute(
+            PostProcessInput(
+                audio=audio,
+                target_format="wav",
+                normalize_loudness=False,
+                trim_silence=False,
+                output_dir=str(tmp_path / "output_xfade"),
+                audio_contract=contract,
+            )
+        )
+
+        processed, _ = sf.read(result.file_path)
+        just_before = np.sqrt(
+            np.mean(processed[int(0.18 * sample_rate) : int(0.19 * sample_rate)] ** 2)
+        )
+        ramp_down = np.sqrt(
+            np.mean(processed[int(0.205 * sample_rate) : int(0.215 * sample_rate)] ** 2)
+        )
+        full_duck = np.sqrt(
+            np.mean(processed[int(0.3 * sample_rate) : int(0.31 * sample_rate)] ** 2)
+        )
+
+        assert just_before > ramp_down > full_duck
+
+
+class TestDuckingHelpers:
+    def test_apply_ducking_only_hits_tts_ranges(self):
+        np = pytest.importorskip("numpy")
+
+        processor = PostProcessor()
+        sample_rate = 48000
+        duration = 5.0
+        data = np.full((int(sample_rate * duration), 2), 0.5, dtype=np.float32)
+        contract = AudioSceneContract(
+            scene_id="scene_dynamic",
+            duration_seconds=duration,
+            mood="calm",
+            tts_segments=[TTSSegment(start_seconds=0.2, end_seconds=0.4)],
+        )
+
+        processed = processor._apply_ducking(data.copy(), sample_rate, contract)
+
+        pre_rms = np.sqrt(np.mean(processed[: int(0.15 * sample_rate)] ** 2))
+        ducked_rms = np.sqrt(
+            np.mean(processed[int(0.25 * sample_rate) : int(0.35 * sample_rate)] ** 2)
+        )
+        post_rms = np.sqrt(np.mean(processed[int(0.6 * sample_rate) :] ** 2))
+
+        assert ducked_rms < pre_rms * 0.7
+        assert post_rms == pytest.approx(pre_rms, rel=0.05)
+
+    def test_apply_ducking_falls_back_to_static_when_tts_segments_empty(self):
+        np = pytest.importorskip("numpy")
+
+        processor = PostProcessor()
+        sample_rate = 48000
+        duration = 5.0
+        data = np.full((int(sample_rate * duration), 2), 0.5, dtype=np.float32)
+        contract = AudioSceneContract(
+            scene_id="scene_static",
+            duration_seconds=duration,
+            mood="calm",
+        )
+
+        processed = processor._apply_ducking(data.copy(), sample_rate, contract)
+        rms = np.sqrt(np.mean(processed**2))
+
+        assert rms < 0.5 * 0.7
+
+    def test_apply_ducking_uses_50ms_crossfade(self):
+        np = pytest.importorskip("numpy")
+
+        processor = PostProcessor()
+        sample_rate = 48000
+        duration = 5.0
+        data = np.full((int(sample_rate * duration), 2), 0.5, dtype=np.float32)
+        contract = AudioSceneContract(
+            scene_id="scene_crossfade",
+            duration_seconds=duration,
+            mood="calm",
+            tts_segments=[TTSSegment(start_seconds=0.2, end_seconds=0.4)],
+        )
+
+        processed = processor._apply_ducking(data.copy(), sample_rate, contract)
+        just_before = np.sqrt(
+            np.mean(processed[int(0.18 * sample_rate) : int(0.19 * sample_rate)] ** 2)
+        )
+        ramp_down = np.sqrt(
+            np.mean(processed[int(0.205 * sample_rate) : int(0.215 * sample_rate)] ** 2)
+        )
+        full_duck = np.sqrt(
+            np.mean(processed[int(0.3 * sample_rate) : int(0.31 * sample_rate)] ** 2)
+        )
+
+        assert just_before > ramp_down > full_duck
 
 
 class TestInputValidation:

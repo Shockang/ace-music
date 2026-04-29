@@ -58,6 +58,19 @@ class AudioSegmentCue(BaseModel):
         return self
 
 
+class TTSSegment(BaseModel):
+    """TTS timing window used for ducking the background music."""
+
+    start_seconds: float = Field(ge=0.0)
+    end_seconds: float = Field(gt=0.0)
+
+    @model_validator(mode="after")
+    def validate_range(self) -> "TTSSegment":
+        if self.end_seconds <= self.start_seconds:
+            raise ValueError("end_seconds must be greater than start_seconds")
+        return self
+
+
 class AudioSceneContract(BaseModel):
     """Structured scene-level audio request from upstream orchestration."""
 
@@ -77,6 +90,7 @@ class AudioSceneContract(BaseModel):
     mix: MixPolicy = Field(default_factory=MixPolicy)
     qa_targets: AudioQATargets = Field(default_factory=AudioQATargets)
     segments: list[AudioSegmentCue] = Field(default_factory=list)
+    tts_segments: list[TTSSegment] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_segments(self) -> "AudioSceneContract":
@@ -103,5 +117,23 @@ class AudioSceneContract(BaseModel):
                 )
 
             previous_segment = segment
+
+        previous_tts_segment: TTSSegment | None = None
+
+        for segment in self.tts_segments:
+            if segment.end_seconds > self.duration_seconds:
+                raise ValueError("tts_segments end_seconds must be <= duration_seconds")
+
+            if previous_tts_segment is None:
+                previous_tts_segment = segment
+                continue
+
+            if segment.start_seconds < previous_tts_segment.start_seconds:
+                raise ValueError("tts_segments must be ordered by start_seconds")
+
+            if segment.start_seconds < previous_tts_segment.end_seconds:
+                raise ValueError("tts_segments must not overlap")
+
+            previous_tts_segment = segment
 
         return self
