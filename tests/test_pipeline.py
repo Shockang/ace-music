@@ -828,6 +828,44 @@ class TestStableAudioBackend:
         assert result.audio_path.endswith(".mp3")
 
     @pytest.mark.asyncio
+    async def test_pipeline_marks_stable_audio_artifacts_completed_in_manifest(self, tmp_path):
+        from ace_music.workspace import WorkspaceManager
+
+        agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
+        workspace = WorkspaceManager(base_dir=str(tmp_path / "output"))
+        run_id = "stable_audio_manifest_run"
+
+        class FakeStableAudioGenerator:
+            async def execute(self, _input_data):
+                output_path = tmp_path / "stable_audio.mp3"
+                output_path.write_bytes(b"fake audio")
+                return AudioOutput(
+                    file_path=str(output_path),
+                    duration_seconds=5.0,
+                    sample_rate=44100,
+                    format="mp3",
+                    channels=2,
+                )
+
+        agent._stable_audio_generator = FakeStableAudioGenerator()
+
+        result = await agent.run(
+            PipelineInput(
+                description="cinematic underscore",
+                duration_seconds=5.0,
+                backend="stable_audio",
+                output_dir=str(tmp_path),
+            ),
+            workspace=workspace,
+            run_id=run_id,
+        )
+
+        assert result.audio_path
+        manifest = workspace.load_manifest(run_id)
+        assert manifest.artifacts["stable_audio_generator"].status.value == "completed"
+        assert manifest.artifacts["output"].status.value == "completed"
+
+    @pytest.mark.asyncio
     async def test_pipeline_rejects_unsupported_stable_audio_inputs(self, tmp_path):
         agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
 

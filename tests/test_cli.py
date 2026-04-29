@@ -117,6 +117,19 @@ def test_generate_parser_exposes_no_tts_flag_name():
     assert option_strings == ["--tts-present", "--no-tts"]
 
 
+def test_generate_parser_describes_stable_audio_mode_limit():
+    parser = cli.build_parser()
+    subparsers = next(
+        action
+        for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction)
+    )
+    generate_parser = subparsers.choices["generate"]
+    mode_action = next(action for action in generate_parser._actions if action.dest == "mode")
+
+    assert "stable_audio only supports instrumental" in mode_action.help
+
+
 @pytest.mark.asyncio
 async def test_run_generate_passes_model_variant_from_cli(tmp_path):
     args = cli.build_parser().parse_args(

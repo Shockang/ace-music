@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 import uuid
@@ -33,6 +34,8 @@ class StableAudioConfig(BaseModel):
     timeout: float = 120.0
     rate_limit_per_minute: int = 20
     audio_format: str = "mp3"
+    poll_interval_seconds: float = 2.0
+    poll_timeout_seconds: float = 600.0
 
     def model_post_init(self, __context: Any) -> None:
         if self.api_key is None:
@@ -66,6 +69,15 @@ class StableAudioGenerator(MusicTool[StableAudioInput, AudioOutput]):
     @property
     def is_read_only(self) -> bool:
         return False
+
+    def _looks_like_audio(self, content: bytes) -> bool:
+        return (
+            content.startswith(b"ID3")
+            or content.startswith(b"RIFF")
+            or content.startswith(b"\xff\xfb")
+            or content.startswith(b"\xff\xf3")
+            or content.startswith(b"\xff\xf2")
+        )
 
     async def _submit_job(self, payload: dict[str, Any]) -> dict[str, Any]:
         headers = {
@@ -105,7 +117,7 @@ class StableAudioGenerator(MusicTool[StableAudioInput, AudioOutput]):
             response.raise_for_status()
             content = response.content
 
-        if content[:3] != b"ID3" and not content.startswith(b"RIFF"):
+        if not self._looks_like_audio(content):
             raise GenerationFailedError("Downloaded payload is not a recognized audio file")
 
         filepath.write_bytes(content)
@@ -119,8 +131,43 @@ class StableAudioGenerator(MusicTool[StableAudioInput, AudioOutput]):
             "output_format": self._config.audio_format,
         }
 
+    def _is_terminal_success(self, result: dict[str, Any]) -> bool:
+        status = str(result.get("status", "")).lower()
+        return status in {"succeeded", "completed", "complete"} or (
+            not status and (result.get("audio_url") or result.get("result", {}).get("audio_url"))
+        )
+
+    def _is_terminal_failure(self, result: dict[str, Any]) -> bool:
+        return str(result.get("status", "")).lower() in {
+            "failed",
+            "error",
+            "cancelled",
+            "canceled",
+        }
+
+    def _extract_error_message(self, result: dict[str, Any]) -> str | None:
+        error = result.get("error")
+        if isinstance(error, dict):
+            message = error.get("message") or error.get("detail") or error.get("error")
+            if message:
+                return str(message)
+        if isinstance(error, str) and error:
+            return error
+        for key in ("message", "detail"):
+            value = result.get(key)
+            if isinstance(value, str) and value:
+                return value
+        return None
+
     def _extract_audio_url(self, result: dict[str, Any]) -> str:
         status = str(result.get("status", "")).lower()
+        if self._is_terminal_failure(result):
+            message = self._extract_error_message(result)
+            if message:
+                raise GenerationFailedError(
+                    f"Stable Audio generation failed: status={status}, error={message}"
+                )
+            raise GenerationFailedError(f"Stable Audio generation failed: status={status}")
         if status and status not in {"succeeded", "completed", "complete"}:
             raise GenerationFailedError(f"Stable Audio generation not ready: status={status}")
 
@@ -136,8 +183,24 @@ class StableAudioGenerator(MusicTool[StableAudioInput, AudioOutput]):
             if not job_id:
                 raise GenerationFailedError("Stable Audio response missing job id")
 
-            polled = await self._poll_job(job_id)
-            audio_url = self._extract_audio_url(polled)
+            last_polled: dict[str, Any] | None = None
+            started_at = time.monotonic()
+            while True:
+                polled = await self._poll_job(job_id)
+                last_polled = polled
+                if self._is_terminal_success(polled) or self._is_terminal_failure(polled):
+                    break
+
+                elapsed = time.monotonic() - started_at
+                if elapsed >= self._config.poll_timeout_seconds:
+                    status = str(polled.get("status", "")).lower() or "unknown"
+                    raise GenerationFailedError(
+                        "Stable Audio generation timed out after "
+                        f"{self._config.poll_timeout_seconds:g}s: status={status}"
+                    )
+                await asyncio.sleep(self._config.poll_interval_seconds)
+
+            audio_url = self._extract_audio_url(last_polled or {})
             audio_path = await self._download_audio(audio_url, input_data.output_dir)
         except httpx.HTTPError as exc:
             raise GenerationFailedError(f"Stable Audio API request failed: {exc}") from exc

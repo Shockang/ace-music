@@ -281,7 +281,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--mode",
         default="instrumental",
         choices=["instrumental", "lyrics", "cover"],
-        help="MiniMax generation mode",
+        help=(
+            "Generation mode for compatible cloud backends; "
+            "stable_audio only supports instrumental"
+        ),
     )
     generate.add_argument(
         "--model-variant",
