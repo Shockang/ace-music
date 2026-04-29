@@ -559,6 +559,43 @@ class MusicAgent:
             segments=segments_info,
         )
 
+    async def run_sequence(
+        self,
+        inputs: list[PipelineInput],
+        workspace: WorkspaceManager | None = None,
+    ) -> list[PipelineOutput]:
+        if not inputs:
+            return []
+
+        if not all(inp.audio_contract for inp in inputs):
+            return [await self.run(inp, workspace=workspace) for inp in inputs]
+
+        presets = []
+        for input_data in inputs:
+            preset = None
+            if input_data.preset_name:
+                match = await self._preset_resolver.resolve(input_data.preset_name)
+                if match:
+                    preset = match.preset
+            presets.append(preset)
+
+        style_outputs = self._style_planner.plan_sequence(
+            [inp.audio_contract for inp in inputs if inp.audio_contract],
+            presets=presets,
+        )
+
+        results: list[PipelineOutput] = []
+        for input_data, style_output in zip(inputs, style_outputs, strict=True):
+            result = await self.run(
+                input_data.model_copy(
+                    update={"style_tags": style_output.prompt.split(", ")}
+                ),
+                workspace=workspace,
+            )
+            results.append(result)
+
+        return results
+
     async def resume(
         self,
         run_id: str,

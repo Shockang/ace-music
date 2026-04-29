@@ -167,6 +167,26 @@ class TestMusicAgentPipeline:
         assert "mix" not in result.metadata
         assert "qa_targets" not in result.metadata
 
+    @pytest.mark.asyncio
+    async def test_run_sequence_generates_one_output_per_input(self, agent, tmp_path):
+        inputs = [
+            PipelineInput(
+                description="calm scene",
+                duration_seconds=5.0,
+                output_dir=str(tmp_path / "a"),
+            ),
+            PipelineInput(
+                description="intense scene",
+                duration_seconds=5.0,
+                output_dir=str(tmp_path / "b"),
+            ),
+        ]
+
+        results = await agent.run_sequence(inputs)
+
+        assert len(results) == 2
+        assert all(result.audio_path for result in results)
+
 
 class TestDirectorBridge:
     def test_request_to_pipeline_input(self):

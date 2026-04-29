@@ -9,6 +9,7 @@ Supports:
 
 import re
 
+from ace_music.schemas.audio_contract import AudioSceneContract
 from ace_music.schemas.preset import StylePreset
 from ace_music.schemas.style import (
     GENRE_TAG_MAP,
@@ -91,7 +92,7 @@ class StylePlanner(MusicTool[StyleInput, StyleOutput]):
     def output_schema(self) -> type[StyleOutput]:
         return StyleOutput
 
-    async def execute(
+    def _plan_single(
         self, input_data: StyleInput, preset: StylePreset | None = None
     ) -> StyleOutput:
         # Start with user-provided tags
@@ -150,3 +151,67 @@ class StylePlanner(MusicTool[StyleInput, StyleOutput]):
             guidance_scale=tempo_overrides.get("guidance_scale", 15.0),
             omega_scale=tempo_overrides.get("omega_scale", 10.0),
         )
+
+    def plan_sequence(
+        self,
+        contracts: list[AudioSceneContract],
+        presets: list[StylePreset | None] | None = None,
+    ) -> list[StyleOutput]:
+        outputs: list[StyleOutput] = []
+        for idx, contract in enumerate(contracts):
+            preset = presets[idx] if presets else None
+            outputs.append(
+                self._plan_single(
+                    StyleInput(
+                        description=contract.scene_description or contract.mood,
+                        mood=contract.mood,
+                    ),
+                    preset=preset,
+                )
+            )
+
+        for idx in range(1, len(outputs)):
+            previous = contracts[idx - 1]
+            current = contracts[idx]
+            previous_arousal = previous.arousal
+            current_arousal = current.arousal
+            if previous_arousal is None or current_arousal is None:
+                continue
+            if abs(current_arousal - previous_arousal) > 0.5:
+                outputs[idx] = outputs[idx].model_copy(
+                    update={
+                        "guidance_scale": min(
+                            outputs[idx].guidance_scale,
+                            outputs[idx - 1].guidance_scale + 0.5,
+                        ),
+                        "omega_scale": min(outputs[idx].omega_scale, 10.0),
+                    }
+                )
+
+        for idx in range(2, len(outputs)):
+            if contracts[idx - 2].mood == contracts[idx - 1].mood == contracts[idx].mood:
+                outputs[idx] = outputs[idx].model_copy(
+                    update={"guidance_scale": min(outputs[idx].guidance_scale + 0.75, 20.0)}
+                )
+
+        opposing_pairs = {("dark", "upbeat"), ("upbeat", "dark")}
+        for idx in range(1, len(outputs)):
+            previous_mood = (contracts[idx - 1].mood or "").strip().lower()
+            current_mood = (contracts[idx].mood or "").strip().lower()
+            if (previous_mood, current_mood) in opposing_pairs:
+                current_prompt_tags = outputs[idx].prompt.split(", ")
+                filtered_tags = [
+                    tag for tag in current_prompt_tags if tag not in {"upbeat", "dark", "intense"}
+                ]
+                if "moderate" not in filtered_tags:
+                    filtered_tags.append("moderate")
+                outputs[idx] = outputs[idx].model_copy(
+                    update={"prompt": ", ".join(filtered_tags)}
+                )
+
+        return outputs
+
+    async def execute(
+        self, input_data: StyleInput, preset: StylePreset | None = None
+    ) -> StyleOutput:
+        return self._plan_single(input_data, preset=preset)

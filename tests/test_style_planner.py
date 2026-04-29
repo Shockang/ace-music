@@ -2,6 +2,7 @@
 
 import pytest
 
+from ace_music.schemas.audio_contract import AudioSceneContract
 from ace_music.schemas.style import StyleInput, StyleOutput
 from ace_music.tools.style_planner import StylePlanner
 
@@ -142,3 +143,35 @@ class TestStylePlannerWithPreset:
         )
         assert "synthwave" in result.prompt
         assert result.guidance_scale == 15.0
+
+
+class TestSequencePlanning:
+    def test_plan_sequence_smooths_calm_to_intense_transition(self, planner):
+        contracts = [
+            AudioSceneContract(
+                scene_id="s1",
+                duration_seconds=5.0,
+                mood="calm",
+                arousal=0.1,
+                intensity=0.2,
+            ),
+            AudioSceneContract(
+                scene_id="s2",
+                duration_seconds=5.0,
+                mood="intense",
+                arousal=0.9,
+                intensity=0.9,
+            ),
+            AudioSceneContract(
+                scene_id="s3",
+                duration_seconds=5.0,
+                mood="intense",
+                arousal=0.9,
+                intensity=0.9,
+            ),
+        ]
+
+        outputs = planner.plan_sequence(contracts)
+
+        assert len(outputs) == 3
+        assert outputs[1].guidance_scale <= outputs[2].guidance_scale
