@@ -104,7 +104,7 @@ def _audio_contract_from_args(args: argparse.Namespace) -> AudioSceneContract | 
             crossfade_seconds=args.crossfade if args.crossfade is not None else 1.5
         ),
         mix=MixPolicy(
-            target_lufs=args.target_lufs if args.target_lufs is not None else -18.0
+            target_lufs=args.target_lufs if args.target_lufs is not None else -14.0
         ),
     )
 

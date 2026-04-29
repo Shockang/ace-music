@@ -175,3 +175,44 @@ async def test_run_generate_builds_audio_contract_only_when_contract_flags_prese
     assert contract.mix.target_lufs == -17.0
     assert contract.layers.tts_present is True
     assert contract.transition.crossfade_seconds == 2.25
+
+
+@pytest.mark.asyncio
+async def test_run_generate_defaults_contract_target_lufs_to_minus_14_when_omitted(tmp_path):
+    args = cli.build_parser().parse_args(
+        [
+            "generate",
+            "--description",
+            "contract default lufs",
+            "--duration",
+            "12",
+            "--output-dir",
+            str(tmp_path),
+            "--tts-present",
+            "--crossfade",
+            "2.25",
+        ]
+    )
+    captured: dict[str, object] = {}
+    mock_result = PipelineOutput(
+        audio_path=str(tmp_path / "mock.wav"),
+        duration_seconds=12.0,
+        format="wav",
+        sample_rate=48000,
+        metadata={"validation": {}},
+    )
+
+    async def fake_run(input_data):
+        captured["input"] = input_data
+        return mock_result
+
+    with patch.object(cli.MusicAgent, "run", new=AsyncMock(side_effect=fake_run)):
+        exit_code, summary = await cli._run_generate(args)
+
+    assert exit_code == 0
+    assert summary["status"] == "success"
+    contract = captured["input"].audio_contract
+    assert contract is not None
+    assert contract.mix.target_lufs == -14.0
+    assert contract.layers.tts_present is True
+    assert contract.transition.crossfade_seconds == 2.25
