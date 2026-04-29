@@ -50,6 +50,10 @@ class DirectorBridge(BaseModel):
         tts_present: bool = Field(
             default=True, description="Whether TTS/dialogue is expected in the final mix"
         )
+        tts_segments: list[dict] | None = Field(
+            default=None,
+            description="Optional TTS timing windows for contract-aware ducking",
+        )
         target_lufs: float | None = Field(
             default=None, ge=-30.0, le=-10.0, description="Desired integrated loudness target"
         )

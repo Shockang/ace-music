@@ -57,6 +57,7 @@ def request_to_pipeline_input(req: DirectorBridge.Request) -> PipelineInput:
         layers=AudioLayerPolicy(tts_present=req.tts_present),
         transition=transition,
         mix=mix,
+        tts_segments=req.tts_segments or [],
     )
 
     return PipelineInput(

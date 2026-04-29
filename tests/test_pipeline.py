@@ -559,3 +559,20 @@ class TestDirectorBridgeEnhanced:
         assert pipeline_input.audio_contract.arousal == 0.95
         assert pipeline_input.audio_contract.transition.crossfade_seconds == 2.0
         assert pipeline_input.audio_contract.mix.target_lufs == -17.0
+
+    def test_request_to_pipeline_maps_tts_segments(self):
+        req = DirectorBridge.Request(
+            scene_id="scene_tts",
+            mood="tense",
+            duration_seconds=10.0,
+            tts_segments=[
+                {"start_seconds": 0.0, "end_seconds": 2.0},
+                {"start_seconds": 4.0, "end_seconds": 5.0},
+            ],
+        )
+
+        pipeline_input = request_to_pipeline_input(req)
+
+        assert pipeline_input.audio_contract is not None
+        assert len(pipeline_input.audio_contract.tts_segments) == 2
+        assert pipeline_input.audio_contract.tts_segments[1].start_seconds == 4.0
