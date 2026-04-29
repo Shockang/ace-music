@@ -260,20 +260,7 @@ class MusicAgent:
             metadata=result.metadata,
         )
 
-    async def _run_local_pipeline(
-        self,
-        input_data: PipelineInput,
-        workspace: WorkspaceManager | None = None,
-        run_id: str | None = None,
-        *,
-        preset=None,
-        style_output=None,
-    ) -> PipelineOutput:
-        pipeline_started_at = time.monotonic()
-        stage_timeout = input_data.stage_timeout_seconds
-        seed = input_data.seed if input_data.seed is not None else random.randint(
-            0, 2**32 - 1
-        )
+    def _resolve_style_context(self, input_data: PipelineInput) -> dict[str, object]:
         contract = input_data.audio_contract
         mapped_audio = (
             None
@@ -316,6 +303,49 @@ class MusicAgent:
                 effective_description = (
                     f"{effective_description}. {mapped_audio.prompt_suffix}"
                 )
+
+        return {
+            "contract": contract,
+            "mapped_audio": mapped_audio,
+            "material": material,
+            "material_description": material_description,
+            "material_mood": material_mood,
+            "material_lyrics": material_lyrics,
+            "material_style_tags": material_style_tags,
+            "effective_description": effective_description,
+            "effective_style_tags": effective_style_tags,
+            "effective_tempo": effective_tempo,
+            "effective_mood": effective_mood,
+            "effective_guidance": effective_guidance,
+        }
+
+    async def _run_local_pipeline(
+        self,
+        input_data: PipelineInput,
+        workspace: WorkspaceManager | None = None,
+        run_id: str | None = None,
+        *,
+        preset=None,
+        style_output=None,
+    ) -> PipelineOutput:
+        pipeline_started_at = time.monotonic()
+        stage_timeout = input_data.stage_timeout_seconds
+        seed = input_data.seed if input_data.seed is not None else random.randint(
+            0, 2**32 - 1
+        )
+        style_context = self._resolve_style_context(input_data)
+        contract = style_context["contract"]
+        mapped_audio = style_context["mapped_audio"]
+        material = style_context["material"]
+        material_description = style_context["material_description"]
+        material_mood = style_context["material_mood"]
+        material_lyrics = style_context["material_lyrics"]
+        material_style_tags = style_context["material_style_tags"]
+        effective_description = style_context["effective_description"]
+        effective_style_tags = style_context["effective_style_tags"]
+        effective_tempo = style_context["effective_tempo"]
+        effective_mood = style_context["effective_mood"]
+        effective_guidance = style_context["effective_guidance"]
 
         if workspace and run_id and not workspace.manifest_exists(run_id):
             workspace.create_run(run_id, description=input_data.description, seed=seed)
@@ -372,7 +402,8 @@ class MusicAgent:
             for tag in prompt_tags:
                 if tag not in merged_tags:
                     merged_tags.append(tag)
-            style_output = style_output.model_copy(update={"prompt": ", ".join(merged_tags)})
+            prompt = ", ".join(merged_tags) if merged_tags else style_output.prompt
+            style_output = style_output.model_copy(update={"prompt": prompt})
 
         if effective_guidance is not None:
             style_output = style_output.model_copy(update={"guidance_scale": effective_guidance})

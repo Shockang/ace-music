@@ -322,6 +322,101 @@ class TestMusicAgentPipeline:
         assert captured_styles == planned_styles
 
     @pytest.mark.asyncio
+    async def test_run_sequence_preserves_style_input_context(self, tmp_path):
+        agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
+        captured_styles: list[StyleOutput] = []
+
+        def fake_plan_sequence(_contracts, presets=None):
+            return [
+                StyleOutput(
+                    prompt="calm, ambient",
+                    guidance_scale=12.5,
+                    omega_scale=7.5,
+                    infer_step=55,
+                )
+            ]
+
+        agent._style_planner.plan_sequence = fake_plan_sequence  # type: ignore[method-assign]
+
+        async def fake_lyrics_execute(_input_data):
+            return LyricsOutput(formatted_lyrics="", is_instrumental=False)
+
+        def fake_execute_sync(input_data):
+            captured_styles.append(input_data.style)
+            output_path = tmp_path / f"{len(captured_styles)}.wav"
+            output_path.write_text("placeholder")
+            return AudioOutput(
+                file_path=str(output_path),
+                duration_seconds=5.0,
+                sample_rate=48000,
+                format="wav",
+                channels=2,
+            )
+
+        async def fake_post_process(_input_data):
+            return ProcessedAudio(
+                file_path=str(tmp_path / "processed.wav"),
+                duration_seconds=5.0,
+                sample_rate=48000,
+                format="wav",
+                channels=2,
+            )
+
+        async def fake_output_execute(_input_data):
+            return OutputResult(
+                audio_path=str(tmp_path / f"final_{len(captured_styles)}.wav"),
+                metadata_path=None,
+                duration_seconds=5.0,
+                format="wav",
+                sample_rate=48000,
+                metadata={},
+            )
+
+        def fake_validate(file_path, **_kwargs):
+            return ValidationResult(
+                file_path=file_path,
+                is_valid=True,
+                format="wav",
+                sample_rate=48000,
+                channels=2,
+                duration_seconds=5.0,
+                file_size_bytes=2048,
+                errors=[],
+            )
+
+        agent._lyrics_planner.execute = fake_lyrics_execute
+        agent._generator_cache = {}
+        agent._resolve_generator = lambda model_variant: type(  # type: ignore[method-assign]
+            "FakeGenerator",
+            (),
+            {"execute_sync": staticmethod(fake_execute_sync)},
+        )()
+        agent._post_processor.execute = fake_post_process
+        agent._output_worker.execute = fake_output_execute
+        agent._audio_validator.validate = fake_validate
+
+        inputs = [
+            PipelineInput(
+                description="scene one",
+                duration_seconds=5.0,
+                output_dir=str(tmp_path / "a"),
+                style_tags=["retro"],
+                tempo_preference="fast",
+                audio_contract=AudioSceneContract(
+                    scene_id="s1",
+                    duration_seconds=5.0,
+                    mood="calm",
+                    arousal=0.1,
+                    intensity=0.2,
+                ),
+            )
+        ]
+
+        await agent.run_sequence(inputs)
+
+        assert "retro" in captured_styles[0].prompt
+
+    @pytest.mark.asyncio
     async def test_run_sequence_falls_back_to_run_for_minimax_backend(self, tmp_path):
         agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
         captured_backends: list[str] = []
