@@ -288,8 +288,52 @@ class TestDuckingHelpers:
         full_duck = np.sqrt(
             np.mean(processed[int(0.3 * sample_rate) : int(0.31 * sample_rate)] ** 2)
         )
+        ramp_up = np.sqrt(
+            np.mean(processed[int(0.385 * sample_rate) : int(0.395 * sample_rate)] ** 2)
+        )
+        after = np.sqrt(
+            np.mean(processed[int(0.46 * sample_rate) : int(0.47 * sample_rate)] ** 2)
+        )
+        full_recovered = np.sqrt(
+            np.mean(processed[int(0.451 * sample_rate) : int(0.459 * sample_rate)] ** 2)
+        )
 
         assert just_before > ramp_down > full_duck
+        assert full_duck < ramp_up < after
+        assert full_recovered == pytest.approx(after, rel=0.02)
+
+    def test_apply_ducking_keeps_full_50ms_crossfades_for_short_segments(self):
+        np = pytest.importorskip("numpy")
+
+        processor = PostProcessor()
+        sample_rate = 48000
+        duration = 5.0
+        data = np.full((int(sample_rate * duration), 2), 0.5, dtype=np.float32)
+        contract = AudioSceneContract(
+            scene_id="scene_short_crossfade",
+            duration_seconds=duration,
+            mood="calm",
+            tts_segments=[TTSSegment(start_seconds=0.2, end_seconds=0.26)],
+        )
+
+        processed = processor._apply_ducking(data.copy(), sample_rate, contract)
+
+        pre = np.sqrt(np.mean(processed[int(0.19 * sample_rate) : int(0.2 * sample_rate)] ** 2))
+        inside_start = np.sqrt(
+            np.mean(processed[int(0.205 * sample_rate) : int(0.215 * sample_rate)] ** 2)
+        )
+        inside_end = np.sqrt(
+            np.mean(processed[int(0.245 * sample_rate) : int(0.255 * sample_rate)] ** 2)
+        )
+        recovered = np.sqrt(
+            np.mean(processed[int(0.311 * sample_rate) : int(0.319 * sample_rate)] ** 2)
+        )
+        near_exit = np.sqrt(
+            np.mean(processed[int(0.258 * sample_rate) : int(0.268 * sample_rate)] ** 2)
+        )
+
+        assert pre > inside_start
+        assert inside_end < near_exit < recovered
 
 
 class TestInputValidation:

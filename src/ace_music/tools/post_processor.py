@@ -75,43 +75,18 @@ class PostProcessor(MusicTool[PostProcessInput, ProcessedAudio]):
         envelope = np.ones(sample_count, dtype=np.float32)
         duck_gain = 10 ** (-contract.mix.ducking_db / 20.0)
         fade_samples = max(1, int(sr * 0.05))
+        sample_positions = np.arange(sample_count, dtype=np.float32)
 
         for segment in contract.tts_segments:
             start = min(sample_count, int(segment.start_seconds * sr))
             end = min(sample_count, int(segment.end_seconds * sr))
             if start >= end:
                 continue
-            segment_length = end - start
-            segment_fade = min(fade_samples, max(1, segment_length // 2))
-
-            if segment_length <= 2 * segment_fade:
-                midpoint = segment_length // 2
-                down_len = max(1, midpoint)
-                up_len = max(1, segment_length - midpoint)
-                local = np.ones(segment_length, dtype=np.float32)
-                local[:down_len] = np.linspace(1.0, duck_gain, down_len, endpoint=False)
-                local[-up_len:] = np.linspace(duck_gain, 1.0, up_len, endpoint=False)
-                if segment_length > down_len + up_len:
-                    local[down_len:-up_len] = duck_gain
-                envelope[start:end] = local
-                continue
-
-            ramp_down_end = start + segment_fade
-            ramp_up_start = end - segment_fade
-
-            envelope[start:ramp_down_end] = np.linspace(
-                1.0,
-                duck_gain,
-                segment_fade,
-                endpoint=False,
-            )
-            envelope[ramp_down_end:ramp_up_start] = duck_gain
-            envelope[ramp_up_start:end] = np.linspace(
-                duck_gain,
-                1.0,
-                segment_fade,
-                endpoint=False,
-            )
+            start_progress = np.clip((sample_positions - start) / fade_samples, 0.0, 1.0)
+            end_progress = np.clip((end - sample_positions) / fade_samples, 0.0, 1.0)
+            segment_progress = np.minimum(start_progress, end_progress)
+            segment_envelope = 1.0 - ((1.0 - duck_gain) * segment_progress)
+            envelope = np.minimum(envelope, segment_envelope)
 
         return envelope
 
