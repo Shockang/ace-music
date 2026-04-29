@@ -274,8 +274,8 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument(
         "--backend",
         default="acestep",
-        choices=["acestep", "minimax"],
-        help="Generation backend: acestep (local) or minimax (cloud API)",
+        choices=["acestep", "minimax", "stable_audio"],
+        help="Generation backend: acestep (local), minimax, or stable_audio",
     )
     generate.add_argument(
         "--mode",

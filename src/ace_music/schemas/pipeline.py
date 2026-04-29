@@ -88,9 +88,9 @@ class PipelineInput(BaseModel):
     )
 
     # Backend selection
-    backend: Literal["acestep", "minimax"] = Field(
+    backend: Literal["acestep", "minimax", "stable_audio"] = Field(
         default="acestep",
-        description="Generation backend: 'acestep' (local model) or 'minimax' (cloud API)",
+        description="Generation backend: 'acestep' (local model), 'minimax', or 'stable_audio'",
     )
     model_variant: Literal["2b", "xl-base", "xl-sft", "xl-turbo"] = Field(
         default="2b",

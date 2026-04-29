@@ -36,6 +36,7 @@ from ace_music.tools.minimax_generator import MiniMaxMusicGenerator
 from ace_music.tools.output import OutputInput, OutputWorker
 from ace_music.tools.post_processor import PostProcessInput, PostProcessor
 from ace_music.tools.preset_resolver import PresetResolver
+from ace_music.tools.stable_audio_generator import StableAudioGenerator, StableAudioInput
 from ace_music.tools.style_planner import StylePlanner
 from ace_music.workspace import WorkspaceManager
 
@@ -65,6 +66,7 @@ class MusicAgent:
         self._generator_config = generator_config or GeneratorConfig()
         self._generator_cache: dict[tuple[tuple[str, object], ...], ACEStepGenerator] = {}
         self._minimax_generator: MiniMaxMusicGenerator | None = None
+        self._stable_audio_generator: StableAudioGenerator | None = None
         self._post_processor = PostProcessor()
         self._output_worker = OutputWorker()
         self._audio_validator = AudioValidator()
@@ -94,6 +96,8 @@ class MusicAgent:
         """Build execution plan from input. Returns list of tool names to execute."""
         if input_data.backend == "minimax":
             return ["minimax_generator", "output"]
+        if input_data.backend == "stable_audio":
+            return ["stable_audio_generator", "output"]
 
         plan = []
 
@@ -256,6 +260,82 @@ class MusicAgent:
             audio_path=result.audio_path,
             duration_seconds=result.duration_seconds,
             format=result.format or "mp3",
+            sample_rate=result.sample_rate,
+            metadata=result.metadata,
+        )
+
+    async def _run_stable_audio_pipeline(
+        self,
+        input_data: PipelineInput,
+        workspace: WorkspaceManager | None,
+        run_id: str | None,
+    ) -> PipelineOutput:
+        from pathlib import Path
+
+        from ace_music.schemas.style import StyleOutput
+
+        pipeline_started_at = time.monotonic()
+        seed = input_data.seed if input_data.seed is not None else random.randint(0, 2**32 - 1)
+        stage_timeout = input_data.stage_timeout_seconds
+
+        if self._stable_audio_generator is None:
+            self._stable_audio_generator = StableAudioGenerator()
+
+        if workspace and run_id and not workspace.manifest_exists(run_id):
+            workspace.create_run(run_id, description=input_data.description, seed=seed)
+
+        Path(input_data.output_dir).mkdir(parents=True, exist_ok=True)
+
+        stable_input = StableAudioInput(
+            description=input_data.description,
+            duration_seconds=input_data.duration_seconds,
+            output_dir=input_data.output_dir,
+        )
+        audio_output = await self._run_stage(
+            "stable_audio_generator",
+            self._stable_audio_generator.execute(stable_input),
+            input_data.generation_timeout_seconds or stage_timeout,
+            workspace,
+            run_id,
+        )
+        if workspace and run_id:
+            workspace.update_artifact(
+                run_id,
+                "stable_audio_generator",
+                ArtifactStatus.COMPLETED,
+                file_path=audio_output.file_path,
+            )
+
+        out_input = OutputInput(
+            audio=ProcessedAudio(
+                file_path=audio_output.file_path,
+                duration_seconds=audio_output.duration_seconds,
+                sample_rate=audio_output.sample_rate,
+                format=audio_output.format,
+                channels=audio_output.channels,
+            ),
+            style=StyleOutput(prompt=input_data.description),
+            seed=seed,
+            lyrics_text="",
+            description=input_data.description,
+            output_dir=input_data.output_dir,
+            output_config=input_data.output_config,
+            extra_metadata={"backend": "stable_audio"},
+        )
+        result = await self._run_stage(
+            "output",
+            self._output_worker.execute(out_input),
+            stage_timeout,
+            workspace,
+            run_id,
+        )
+        result.metadata["backend"] = "stable_audio"
+        result.metadata["elapsed_seconds"] = round(time.monotonic() - pipeline_started_at, 2)
+
+        return PipelineOutput(
+            audio_path=result.audio_path,
+            duration_seconds=result.duration_seconds,
+            format=result.format,
             sample_rate=result.sample_rate,
             metadata=result.metadata,
         )
@@ -582,6 +662,8 @@ class MusicAgent:
         # MiniMax backend: simplified pipeline
         if input_data.backend == "minimax":
             return await self._run_minimax_pipeline(input_data, workspace, run_id)
+        if input_data.backend == "stable_audio":
+            return await self._run_stable_audio_pipeline(input_data, workspace, run_id)
         return await self._run_local_pipeline(input_data, workspace=workspace, run_id=run_id)
 
     async def run_sequence(

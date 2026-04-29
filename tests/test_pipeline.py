@@ -753,6 +753,15 @@ class TestBuildPlan:
         plan = agent._build_plan(inp)
         assert "lyrics_planner" in plan
 
+    def test_plan_with_stable_audio_backend(self, agent, tmp_path):
+        inp = PipelineInput(
+            description="cinematic underscore",
+            backend="stable_audio",
+            output_dir=str(tmp_path),
+        )
+        plan = agent._build_plan(inp)
+        assert plan == ["stable_audio_generator", "output"]
+
 
 class TestPipelineWithPreset:
     @pytest.mark.asyncio
@@ -785,6 +794,38 @@ class TestPipelineWithPreset:
         )
         assert isinstance(result, PipelineOutput)
         assert result.audio_path
+
+
+class TestStableAudioBackend:
+    @pytest.mark.asyncio
+    async def test_pipeline_runs_with_stable_audio_backend(self, tmp_path):
+        agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
+
+        class FakeStableAudioGenerator:
+            async def execute(self, _input_data):
+                output_path = tmp_path / "stable_audio.mp3"
+                output_path.write_bytes(b"fake audio")
+                return AudioOutput(
+                    file_path=str(output_path),
+                    duration_seconds=5.0,
+                    sample_rate=44100,
+                    format="mp3",
+                    channels=2,
+                )
+
+        agent._stable_audio_generator = FakeStableAudioGenerator()
+
+        result = await agent.run(
+            PipelineInput(
+                description="cinematic underscore",
+                duration_seconds=5.0,
+                backend="stable_audio",
+                output_dir=str(tmp_path),
+            )
+        )
+
+        assert result.metadata["backend"] == "stable_audio"
+        assert result.audio_path.endswith(".mp3")
 
 
 class TestPipelineManifest:

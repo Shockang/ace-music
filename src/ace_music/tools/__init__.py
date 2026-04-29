@@ -6,6 +6,11 @@ from .lyrics_planner import LyricsPlanner
 from .minimax_generator import MiniMaxMusicConfig, MiniMaxMusicGenerator, MiniMaxMusicInput
 from .output import OutputInput, OutputResult, OutputWorker
 from .post_processor import PostProcessInput, PostProcessor
+from .stable_audio_generator import (
+    StableAudioConfig,
+    StableAudioGenerator,
+    StableAudioInput,
+)
 from .style_planner import StylePlanner
 
 __all__ = [
@@ -22,5 +27,8 @@ __all__ = [
     "OutputWorker",
     "PostProcessInput",
     "PostProcessor",
+    "StableAudioConfig",
+    "StableAudioGenerator",
+    "StableAudioInput",
     "StylePlanner",
 ]
