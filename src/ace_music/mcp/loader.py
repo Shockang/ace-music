@@ -37,7 +37,6 @@ def load_model_config(config_path: str | Path | None = None) -> ModelConfig:
         cpu_offload=model_section.get("cpu_offload", False),
         overlapped_decode=model_section.get("overlapped_decode", False),
         model_variant=model_section.get("model_variant", "2b"),
-        mock_mode=model_section.get("mock_mode", False),
     )
 
 
