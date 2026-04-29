@@ -366,6 +366,33 @@ class TestDuckingHelpers:
         assert join <= first_end * 1.05
         assert second_start <= first_end * 1.05
 
+    def test_apply_ducking_preserves_small_positive_gap_between_tts_segments(self):
+        np = pytest.importorskip("numpy")
+
+        processor = PostProcessor()
+        sample_rate = 48000
+        duration = 5.0
+        data = np.full((int(sample_rate * duration), 2), 0.5, dtype=np.float32)
+        contract = AudioSceneContract(
+            scene_id="scene_small_gap",
+            duration_seconds=duration,
+            mood="calm",
+            tts_segments=[
+                TTSSegment(start_seconds=1.0, end_seconds=1.2),
+                TTSSegment(start_seconds=1.24, end_seconds=1.44),
+            ],
+        )
+
+        processed = processor._apply_ducking(data.copy(), sample_rate, contract)
+        gap_rms = np.sqrt(
+            np.mean(processed[int(1.215 * sample_rate) : int(1.225 * sample_rate)] ** 2)
+        )
+        ducked_rms = np.sqrt(
+            np.mean(processed[int(1.15 * sample_rate) : int(1.19 * sample_rate)] ** 2)
+        )
+
+        assert gap_rms > ducked_rms * 1.2
+
 
 class TestInputValidation:
     def test_validate_post_process_input(self, processor, mock_audio):

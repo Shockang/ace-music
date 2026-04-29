@@ -77,8 +77,6 @@ class PostProcessor(MusicTool[PostProcessInput, ProcessedAudio]):
         fade_samples = max(1, int(sr * 0.05))
 
         merged_ranges: list[tuple[int, int]] = []
-        merge_gap = max(1, int(sr * 0.05))
-
         for segment in contract.tts_segments:
             start = min(sample_count, int(segment.start_seconds * sr))
             end = min(sample_count, int(segment.end_seconds * sr))
@@ -89,7 +87,7 @@ class PostProcessor(MusicTool[PostProcessInput, ProcessedAudio]):
                 continue
 
             previous_start, previous_end = merged_ranges[-1]
-            if start <= previous_end + merge_gap:
+            if start <= previous_end:
                 merged_ranges[-1] = (previous_start, max(previous_end, end))
             else:
                 merged_ranges.append((start, end))
