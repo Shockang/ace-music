@@ -156,16 +156,25 @@ class StylePlanner(MusicTool[StyleInput, StyleOutput]):
         self,
         contracts: list[AudioSceneContract],
         presets: list[StylePreset | None] | None = None,
+        style_inputs: list[StyleInput] | None = None,
     ) -> list[StyleOutput]:
+        if style_inputs is not None and len(style_inputs) != len(contracts):
+            raise ValueError("style_inputs length must match contracts length")
+
         outputs: list[StyleOutput] = []
         for idx, contract in enumerate(contracts):
             preset = presets[idx] if presets else None
+            style_input = (
+                style_inputs[idx]
+                if style_inputs is not None
+                else StyleInput(
+                    description=contract.scene_description or contract.mood,
+                    mood=contract.mood,
+                )
+            )
             outputs.append(
                 self._plan_single(
-                    StyleInput(
-                        description=contract.scene_description or contract.mood,
-                        mood=contract.mood,
-                    ),
+                    style_input,
                     preset=preset,
                 )
             )

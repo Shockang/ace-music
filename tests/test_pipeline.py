@@ -267,7 +267,7 @@ class TestMusicAgentPipeline:
             ),
         ]
 
-        def fake_plan_sequence(_contracts, presets=None):
+        def fake_plan_sequence(_contracts, presets=None, style_inputs=None):
             return planned_styles
 
         async def fake_run_local_pipeline(
@@ -326,7 +326,7 @@ class TestMusicAgentPipeline:
         agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
         captured_styles: list[StyleOutput] = []
 
-        def fake_plan_sequence(_contracts, presets=None):
+        def fake_plan_sequence(_contracts, presets=None, style_inputs=None):
             return [
                 StyleOutput(
                     prompt="calm, ambient",

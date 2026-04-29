@@ -582,17 +582,38 @@ class MusicAgent:
             return [await self.run(inp, workspace=workspace) for inp in inputs]
 
         presets = []
+        style_inputs = []
         for input_data in inputs:
             preset = None
             if input_data.preset_name:
                 match = await self._preset_resolver.resolve(input_data.preset_name)
                 if match:
                     preset = match.preset
+                else:
+                    logger.warning(
+                        "Preset '%s' not found, using heuristic style",
+                        input_data.preset_name,
+                    )
             presets.append(preset)
+
+            style_context = self._resolve_style_context(input_data)
+            from ace_music.schemas.style import StyleInput
+
+            style_inputs.append(
+                StyleInput(
+                    description=style_context["material_description"]
+                    or style_context["effective_description"],
+                    reference_tags=style_context["effective_style_tags"]
+                    + style_context["material_style_tags"],
+                    tempo_preference=style_context["effective_tempo"],
+                    mood=style_context["material_mood"] or style_context["effective_mood"],
+                )
+            )
 
         style_outputs = self._style_planner.plan_sequence(
             [inp.audio_contract for inp in inputs if inp.audio_contract],
             presets=presets,
+            style_inputs=style_inputs,
         )
 
         results: list[PipelineOutput] = []

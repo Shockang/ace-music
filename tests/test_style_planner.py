@@ -233,3 +233,28 @@ class TestSequencePlanning:
 
         assert "dark" in outputs[0].prompt
         assert "pulse" in outputs[0].prompt
+
+    def test_plan_sequence_respects_description_and_tempo_context(self, planner):
+        contracts = [
+            AudioSceneContract(
+                scene_id="s1",
+                duration_seconds=5.0,
+                mood="calm",
+                arousal=0.1,
+                intensity=0.2,
+            )
+        ]
+
+        outputs = planner.plan_sequence(
+            contracts,
+            style_inputs=[
+                StyleInput(
+                    description="a dreamy synthwave track",
+                    tempo_preference="fast",
+                    mood="calm",
+                )
+            ],
+        )
+
+        assert "synthwave" in outputs[0].prompt
+        assert outputs[0].omega_scale == 12.0
