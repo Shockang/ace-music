@@ -203,11 +203,12 @@ class StylePlanner(MusicTool[StyleInput, StyleOutput]):
                 current_energy = contracts[idx].arousal or 0.0
                 target_idx = idx - 1 if previous_energy <= current_energy else idx
                 prompt_tags = outputs[target_idx].prompt.split(", ")
-                filtered_tags = [
-                    tag for tag in prompt_tags if tag not in {"upbeat", "dark", "intense"}
-                ]
+                filtered_tags = list(prompt_tags)
                 if "moderate" not in filtered_tags and "neutral" not in filtered_tags:
-                    filtered_tags.append("moderate")
+                    target_arousal = contracts[target_idx].arousal or 0.0
+                    filtered_tags.append(
+                        "moderate" if target_arousal > 0.3 else "neutral"
+                    )
                 outputs[target_idx] = outputs[target_idx].model_copy(
                     update={"prompt": ", ".join(filtered_tags)}
                 )

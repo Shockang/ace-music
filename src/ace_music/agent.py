@@ -545,6 +545,11 @@ class MusicAgent:
         if not all(inp.audio_contract for inp in inputs):
             return [await self.run(inp, workspace=workspace) for inp in inputs]
 
+        if not all(
+            inp.backend == "acestep" and not inp.passthrough_audio_contract for inp in inputs
+        ):
+            return [await self.run(inp, workspace=workspace) for inp in inputs]
+
         presets = []
         for input_data in inputs:
             preset = None

@@ -321,6 +321,74 @@ class TestMusicAgentPipeline:
 
         assert captured_styles == planned_styles
 
+    @pytest.mark.asyncio
+    async def test_run_sequence_falls_back_to_run_for_minimax_backend(self, tmp_path):
+        agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
+        captured_backends: list[str] = []
+
+        async def fake_run(input_data, workspace=None, run_id=None):
+            captured_backends.append(input_data.backend)
+            return PipelineOutput(
+                audio_path=str(tmp_path / f"{len(captured_backends)}.wav"),
+                duration_seconds=5.0,
+                format="wav",
+                sample_rate=48000,
+                metadata={},
+            )
+
+        agent.run = fake_run  # type: ignore[method-assign]
+
+        inputs = [
+            PipelineInput(
+                description="cloud scene",
+                duration_seconds=5.0,
+                backend="minimax",
+                audio_contract=AudioSceneContract(
+                    scene_id="s1",
+                    duration_seconds=5.0,
+                    mood="calm",
+                ),
+            )
+        ]
+
+        await agent.run_sequence(inputs)
+
+        assert captured_backends == ["minimax"]
+
+    @pytest.mark.asyncio
+    async def test_run_sequence_falls_back_to_run_for_passthrough_contracts(self, tmp_path):
+        agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
+        captured_passthrough: list[bool] = []
+
+        async def fake_run(input_data, workspace=None, run_id=None):
+            captured_passthrough.append(input_data.passthrough_audio_contract)
+            return PipelineOutput(
+                audio_path=str(tmp_path / f"{len(captured_passthrough)}.wav"),
+                duration_seconds=5.0,
+                format="wav",
+                sample_rate=48000,
+                metadata={},
+            )
+
+        agent.run = fake_run  # type: ignore[method-assign]
+
+        inputs = [
+            PipelineInput(
+                description="passthrough scene",
+                duration_seconds=5.0,
+                passthrough_audio_contract=True,
+                audio_contract=AudioSceneContract(
+                    scene_id="s1",
+                    duration_seconds=5.0,
+                    mood="calm",
+                ),
+            )
+        ]
+
+        await agent.run_sequence(inputs)
+
+        assert captured_passthrough == [True]
+
 
 class TestDirectorBridge:
     def test_request_to_pipeline_input(self):

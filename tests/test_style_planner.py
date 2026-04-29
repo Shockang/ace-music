@@ -197,3 +197,39 @@ class TestSequencePlanning:
         outputs = planner.plan_sequence(contracts)
 
         assert "moderate" in outputs[0].prompt or "neutral" in outputs[0].prompt
+        assert "dark" in outputs[0].prompt
+
+    def test_plan_sequence_preserves_preset_tags_when_smoothing_opposing_moods(self, planner):
+        from ace_music.schemas.preset import StylePreset
+
+        contracts = [
+            AudioSceneContract(
+                scene_id="s1",
+                duration_seconds=5.0,
+                mood="dark",
+                arousal=0.2,
+                intensity=0.2,
+            ),
+            AudioSceneContract(
+                scene_id="s2",
+                duration_seconds=5.0,
+                mood="upbeat",
+                arousal=0.9,
+                intensity=0.9,
+            ),
+        ]
+        presets = [
+            StylePreset(
+                id="dark_scene",
+                name="Dark Scene",
+                description="Dark preset",
+                prompt="dark, moody, pulse",
+                guidance_scale=14.0,
+            ),
+            None,
+        ]
+
+        outputs = planner.plan_sequence(contracts, presets=presets)
+
+        assert "dark" in outputs[0].prompt
+        assert "pulse" in outputs[0].prompt
