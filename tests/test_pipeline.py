@@ -9,6 +9,7 @@ import pytest
 from ace_music.agent import MusicAgent
 from ace_music.bridge import DirectorBridge
 from ace_music.bridge.director_bridge import pipeline_output_to_response, request_to_pipeline_input
+from ace_music.errors import OutputValidationError
 from ace_music.providers.deepseek import DeepSeekProvider
 from ace_music.providers.router import FeatureRouter
 from ace_music.schemas.audio import AudioOutput, ProcessedAudio
@@ -415,6 +416,194 @@ class TestMusicAgentPipeline:
         await agent.run_sequence(inputs)
 
         assert "retro" in captured_styles[0].prompt
+
+    @pytest.mark.asyncio
+    async def test_run_sequence_does_not_override_planned_guidance_with_contract_mapping(
+        self, tmp_path
+    ):
+        agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
+        captured_styles: list[StyleOutput] = []
+
+        async def fake_lyrics_execute(_input_data):
+            return LyricsOutput(formatted_lyrics="", is_instrumental=False)
+
+        def fake_execute_sync(input_data):
+            captured_styles.append(input_data.style)
+            output_path = tmp_path / f"{len(captured_styles)}.wav"
+            output_path.write_text("placeholder")
+            return AudioOutput(
+                file_path=str(output_path),
+                duration_seconds=5.0,
+                sample_rate=48000,
+                format="wav",
+                channels=2,
+            )
+
+        async def fake_post_process(_input_data):
+            return ProcessedAudio(
+                file_path=str(tmp_path / "processed.wav"),
+                duration_seconds=5.0,
+                sample_rate=48000,
+                format="wav",
+                channels=2,
+            )
+
+        async def fake_output_execute(_input_data):
+            return OutputResult(
+                audio_path=str(tmp_path / "final.wav"),
+                metadata_path=None,
+                duration_seconds=5.0,
+                format="wav",
+                sample_rate=48000,
+                metadata={},
+            )
+
+        def fake_validate(file_path, **_kwargs):
+            return ValidationResult(
+                file_path=file_path,
+                is_valid=True,
+                format="wav",
+                sample_rate=48000,
+                channels=2,
+                duration_seconds=5.0,
+                file_size_bytes=2048,
+                errors=[],
+            )
+
+        async def fake_execute_style(_input_data, preset=None):
+            raise AssertionError(
+                "run_sequence should not call execute() when style_output is injected"
+            )
+
+        agent._lyrics_planner.execute = fake_lyrics_execute
+        agent._style_planner.execute = fake_execute_style
+        agent._generator_cache = {}
+        agent._resolve_generator = lambda model_variant: type(  # type: ignore[method-assign]
+            "FakeGenerator",
+            (),
+            {"execute_sync": staticmethod(fake_execute_sync)},
+        )()
+        agent._post_processor.execute = fake_post_process
+        agent._output_worker.execute = fake_output_execute
+        agent._audio_validator.validate = fake_validate
+
+        planned_style = StyleOutput(
+            prompt="calm, ambient",
+            guidance_scale=11.5,
+            omega_scale=7.0,
+            infer_step=55,
+        )
+        agent._style_planner.plan_sequence = (  # type: ignore[method-assign]
+            lambda _contracts, presets=None, style_inputs=None: [planned_style]
+        )
+
+        inputs = [
+            PipelineInput(
+                description="scene one",
+                duration_seconds=5.0,
+                output_dir=str(tmp_path / "a"),
+                audio_contract=AudioSceneContract(
+                    scene_id="s1",
+                    duration_seconds=5.0,
+                    mood="calm",
+                    arousal=0.1,
+                    intensity=0.2,
+                ),
+            )
+        ]
+
+        await agent.run_sequence(inputs)
+
+        assert captured_styles[0].guidance_scale == planned_style.guidance_scale
+
+    @pytest.mark.asyncio
+    async def test_run_local_pipeline_marks_post_processor_failed_on_validation_error(
+        self, tmp_path
+    ):
+        from ace_music.schemas.repair import ArtifactStatus
+        from ace_music.workspace import WorkspaceManager
+
+        agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
+        workspace = WorkspaceManager(base_dir=str(tmp_path / "output"))
+        run_id = "validation_fail_run"
+        workspace.create_run(run_id, description="validation fail")
+
+        async def fake_lyrics_execute(_input_data):
+            return LyricsOutput(formatted_lyrics="", is_instrumental=False)
+
+        async def fake_style_execute(_input_data, preset=None):
+            return StyleOutput(prompt="calm, ambient")
+
+        def fake_execute_sync(_input_data):
+            output_path = tmp_path / "generated.wav"
+            output_path.write_text("placeholder")
+            return AudioOutput(
+                file_path=str(output_path),
+                duration_seconds=5.0,
+                sample_rate=48000,
+                format="wav",
+                channels=2,
+            )
+
+        async def fake_post_process(_input_data):
+            return ProcessedAudio(
+                file_path=str(tmp_path / "processed.wav"),
+                duration_seconds=5.0,
+                sample_rate=48000,
+                format="wav",
+                channels=2,
+            )
+
+        validation_calls = {"count": 0}
+
+        def fake_validate(file_path, **_kwargs):
+            validation_calls["count"] += 1
+            if validation_calls["count"] == 1:
+                return ValidationResult(
+                    file_path=file_path,
+                    is_valid=False,
+                    format="wav",
+                    sample_rate=48000,
+                    channels=2,
+                    duration_seconds=5.0,
+                    file_size_bytes=2048,
+                    errors=["post validation failed"],
+                )
+            return ValidationResult(
+                file_path=file_path,
+                is_valid=True,
+                format="wav",
+                sample_rate=48000,
+                channels=2,
+                duration_seconds=5.0,
+                file_size_bytes=2048,
+                errors=[],
+            )
+
+        agent._lyrics_planner.execute = fake_lyrics_execute
+        agent._style_planner.execute = fake_style_execute
+        agent._generator_cache = {}
+        agent._resolve_generator = lambda model_variant: type(  # type: ignore[method-assign]
+            "FakeGenerator",
+            (),
+            {"execute_sync": staticmethod(fake_execute_sync)},
+        )()
+        agent._post_processor.execute = fake_post_process
+        agent._audio_validator.validate = fake_validate
+
+        with pytest.raises(OutputValidationError):
+            await agent._run_local_pipeline(
+                PipelineInput(
+                    description="scene one",
+                    duration_seconds=5.0,
+                    output_dir=str(tmp_path / "a"),
+                ),
+                workspace=workspace,
+                run_id=run_id,
+            )
+
+        manifest = workspace.load_manifest(run_id)
+        assert manifest.artifacts["post_processor"].status == ArtifactStatus.FAILED
 
     @pytest.mark.asyncio
     async def test_run_sequence_falls_back_to_run_for_minimax_backend(self, tmp_path):

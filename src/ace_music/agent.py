@@ -405,6 +405,9 @@ class MusicAgent:
             prompt = ", ".join(merged_tags) if merged_tags else style_output.prompt
             style_output = style_output.model_copy(update={"prompt": prompt})
 
+        if style_output is not None and input_data.guidance_scale is None:
+            effective_guidance = None
+
         if effective_guidance is not None:
             style_output = style_output.model_copy(update={"guidance_scale": effective_guidance})
         if input_data.infer_step is not None:
@@ -470,6 +473,14 @@ class MusicAgent:
             message = "Post-processed audio failed validation: " + "; ".join(
                 processed_validation.errors
             )
+            if workspace and run_id:
+                workspace.update_artifact(
+                    run_id,
+                    "post_processor",
+                    ArtifactStatus.FAILED,
+                    file_path=processed.file_path,
+                    error_message=message,
+                )
             raise OutputValidationError(message, processed_validation.errors)
 
         extra_metadata: dict = {}
@@ -511,6 +522,14 @@ class MusicAgent:
         )
         if not final_validation.is_valid:
             message = "Final audio failed validation: " + "; ".join(final_validation.errors)
+            if workspace and run_id:
+                workspace.update_artifact(
+                    run_id,
+                    "output",
+                    ArtifactStatus.FAILED,
+                    file_path=result.audio_path,
+                    error_message=message,
+                )
             raise OutputValidationError(message, final_validation.errors)
 
         result.metadata["validation"] = final_validation.model_dump()
