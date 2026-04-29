@@ -89,7 +89,7 @@ class TestMockProcessing:
 
         filepath = tmp_path / "dynamic.wav"
         sample_rate = 48000
-        duration = 1.0
+        duration = 5.0
         data = np.full((int(sample_rate * duration), 2), 0.5, dtype=np.float32)
         sf.write(filepath, data, sample_rate)
 
@@ -136,7 +136,7 @@ class TestMockProcessing:
 
         filepath = tmp_path / "static.wav"
         sample_rate = 48000
-        duration = 1.0
+        duration = 5.0
         data = np.full((int(sample_rate * duration), 2), 0.5, dtype=np.float32)
         sf.write(filepath, data, sample_rate)
 
@@ -176,7 +176,7 @@ class TestMockProcessing:
 
         filepath = tmp_path / "crossfade.wav"
         sample_rate = 48000
-        duration = 1.0
+        duration = 5.0
         data = np.full((int(sample_rate * duration), 2), 0.5, dtype=np.float32)
         sf.write(filepath, data, sample_rate)
 
@@ -289,7 +289,7 @@ class TestDuckingHelpers:
             np.mean(processed[int(0.3 * sample_rate) : int(0.31 * sample_rate)] ** 2)
         )
         ramp_up = np.sqrt(
-            np.mean(processed[int(0.385 * sample_rate) : int(0.395 * sample_rate)] ** 2)
+            np.mean(processed[int(0.415 * sample_rate) : int(0.425 * sample_rate)] ** 2)
         )
         after = np.sqrt(
             np.mean(processed[int(0.46 * sample_rate) : int(0.47 * sample_rate)] ** 2)

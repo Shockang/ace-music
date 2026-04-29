@@ -75,18 +75,34 @@ class PostProcessor(MusicTool[PostProcessInput, ProcessedAudio]):
         envelope = np.ones(sample_count, dtype=np.float32)
         duck_gain = 10 ** (-contract.mix.ducking_db / 20.0)
         fade_samples = max(1, int(sr * 0.05))
-        sample_positions = np.arange(sample_count, dtype=np.float32)
 
         for segment in contract.tts_segments:
             start = min(sample_count, int(segment.start_seconds * sr))
             end = min(sample_count, int(segment.end_seconds * sr))
             if start >= end:
                 continue
-            start_progress = np.clip((sample_positions - start) / fade_samples, 0.0, 1.0)
-            end_progress = np.clip((end - sample_positions) / fade_samples, 0.0, 1.0)
-            segment_progress = np.minimum(start_progress, end_progress)
-            segment_envelope = 1.0 - ((1.0 - duck_gain) * segment_progress)
-            envelope = np.minimum(envelope, segment_envelope)
+            entry_end = min(sample_count, start + fade_samples)
+            if start < entry_end:
+                entry_ramp = np.linspace(1.0, duck_gain, entry_end - start, endpoint=False)
+                envelope[start:entry_end] = np.minimum(envelope[start:entry_end], entry_ramp)
+
+            if entry_end < end:
+                envelope[entry_end:end] = np.minimum(envelope[entry_end:end], duck_gain)
+
+            exit_end = min(sample_count, end + fade_samples)
+            exit_start_value = duck_gain
+            if end <= entry_end:
+                progress_at_end = (end - start) / fade_samples
+                exit_start_value = 1.0 - ((1.0 - duck_gain) * progress_at_end)
+
+            if end < exit_end:
+                exit_ramp = np.linspace(
+                    exit_start_value,
+                    1.0,
+                    exit_end - end,
+                    endpoint=False,
+                )
+                envelope[end:exit_end] = np.minimum(envelope[end:exit_end], exit_ramp)
 
         return envelope
 
