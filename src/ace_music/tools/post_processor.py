@@ -2,10 +2,12 @@
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 from ace_music.schemas.audio import AudioOutput, ProcessedAudio
+from ace_music.schemas.audio_contract import AudioSceneContract
 from ace_music.tools.base import MusicTool
 
 logger = logging.getLogger(__name__)
@@ -21,6 +23,9 @@ class PostProcessInput(BaseModel):
     trim_silence: bool = True
     silence_threshold_db: float = Field(default=-60.0)
     output_dir: str | None = Field(default=None)
+    audio_contract: AudioSceneContract | None = Field(
+        default=None, description="Scene contract for mix parameters (overrides defaults)"
+    )
 
 
 class PostProcessor(MusicTool[PostProcessInput, ProcessedAudio]):
@@ -46,8 +51,20 @@ class PostProcessor(MusicTool[PostProcessInput, ProcessedAudio]):
     def is_read_only(self) -> bool:
         return False
 
+    def _apply_contract_overrides(self, input_data: PostProcessInput) -> PostProcessInput:
+        """Override post-process parameters from audio contract if present."""
+        if not input_data.audio_contract:
+            return input_data
+        contract = input_data.audio_contract
+        updates: dict[str, Any] = {}
+        if contract.mix:
+            updates["target_lufs"] = contract.mix.target_lufs
+        if not updates:
+            return input_data
+        return input_data.model_copy(update=updates)
+
     def _process_with_soundfile(self, input_data: PostProcessInput) -> ProcessedAudio:
-        """Process audio using soundfile + numpy (no heavy deps)."""
+        """Process audio using soundfile + numpy (with optional LUFS normalization)."""
         import numpy as np
         import soundfile as sf
 
@@ -66,16 +83,59 @@ class PostProcessor(MusicTool[PostProcessInput, ProcessedAudio]):
             else:
                 logger.info("No non-silent audio found, keeping original")
 
-        # Simple peak normalization (LUFS requires pyloudnorm or similar)
         peak = np.max(np.abs(data)) if len(data) > 0 else 1.0
-        loudness_lufs = None
         peak_db = 20.0 * np.log10(peak) if peak > 0 else -float("inf")
+        loudness_lufs = None
 
         if input_data.normalize_loudness and peak > 0:
-            # Simple peak normalization to -1 dB
-            target_peak = 10 ** (-1.0 / 20.0)
-            data = data * (target_peak / peak)
-            peak_db = -1.0
+            # Attempt LUFS-based normalization with pyloudnorm
+            try:
+                import pyloudnorm as pyln
+
+                meter = pyln.Meter(sr)
+                current_lufs = meter.integrated_loudness(data)
+                gain_db = input_data.target_lufs - current_lufs
+                gain_linear = 10 ** (gain_db / 20.0)
+
+                data = data * gain_linear
+                new_peak = np.max(np.abs(data))
+
+                # Peak limit to prevent clipping
+                if new_peak > 0.999:
+                    limit_gain = 0.999 / new_peak
+                    data = data * limit_gain
+                    peak_db = 20.0 * np.log10(0.999)
+                    logger.info("Peak limited after LUFS gain")
+                else:
+                    peak_db = 20.0 * np.log10(new_peak) if new_peak > 0 else -float("inf")
+
+                loudness_lufs = input_data.target_lufs
+                logger.info(
+                    "LUFS normalized: %.1f -> %.1f LUFS (gain %.1f dB)",
+                    current_lufs,
+                    input_data.target_lufs,
+                    gain_db,
+                )
+            except ImportError:
+                # Fallback to peak normalization
+                target_peak = 10 ** (-1.0 / 20.0)
+                data = data * (target_peak / peak)
+                peak_db = -1.0
+
+        # Apply static ducking if TTS is present and sidechain is configured
+        if input_data.audio_contract and input_data.audio_contract.mix:
+            mix = input_data.audio_contract.mix
+            layers = input_data.audio_contract.layers
+            if layers and layers.tts_present and mix.sidechain_source == "tts":
+                ducking_db = mix.ducking_db
+                ducking_gain = 10 ** (-ducking_db / 20.0)
+                data = data * ducking_gain
+                peak_db -= ducking_db
+                logger.info(
+                    "Static ducking applied: -%.1f dB (TTS present, sidechain=%s)",
+                    ducking_db,
+                    mix.sidechain_source,
+                )
 
         # Determine output path
         out_dir = Path(input_data.output_dir or Path(input_data.audio.file_path).parent)
@@ -86,6 +146,16 @@ class PostProcessor(MusicTool[PostProcessInput, ProcessedAudio]):
         sf.write(str(out_path), data, sr)
 
         duration = len(data) / sr
+
+        # Re-measure LUFS if pyloudnorm is available (captures final state after ducking)
+        if loudness_lufs is None:
+            try:
+                import pyloudnorm as pyln
+
+                meter = pyln.Meter(sr)
+                loudness_lufs = meter.integrated_loudness(data)
+            except ImportError:
+                pass
 
         return ProcessedAudio(
             file_path=str(out_path),
@@ -119,13 +189,14 @@ class PostProcessor(MusicTool[PostProcessInput, ProcessedAudio]):
             sample_rate=input_data.audio.sample_rate,
             format=input_data.target_format,
             channels=input_data.audio.channels,
-            loudness_lufs=-14.0 if input_data.normalize_loudness else None,
+            loudness_lufs=input_data.target_lufs if input_data.normalize_loudness else None,
             peak_db=-1.0 if input_data.normalize_loudness else None,
         )
 
     async def execute(self, input_data: PostProcessInput) -> ProcessedAudio:
+        effective_input = self._apply_contract_overrides(input_data)
         try:
-            return self._process_with_soundfile(input_data)
+            return self._process_with_soundfile(effective_input)
         except ImportError:
             logger.info("soundfile/numpy not available, using mock post-processing")
-            return self._process_mock(input_data)
+            return self._process_mock(effective_input)

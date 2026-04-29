@@ -32,6 +32,7 @@ model = [
     "transformers>=4.40",
     "soundfile>=0.12",
     "numpy>=1.26",
+    "pyloudnorm>=0.1.0",
 ]
 dev = [
     "pytest>=8.0",

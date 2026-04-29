@@ -413,10 +413,16 @@ class MusicAgent:
             )
 
         # Stage 4: Post-processing
+        # Merge emotion-mapped mix parameters into contract for downstream consumption
+        effective_contract = contract
+        if mapped_audio and contract:
+            effective_contract = contract.model_copy(update={"mix": mapped_audio.mix})
+
         pp_input = PostProcessInput(
             audio=audio_output,
             target_format=input_data.output_format,
             output_dir=input_data.output_dir,
+            audio_contract=effective_contract,
         )
         processed = await self._run_stage(
             "post_processor",
