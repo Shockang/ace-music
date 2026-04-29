@@ -19,6 +19,12 @@ from pydantic import ValidationError
 from ace_music.agent import MusicAgent
 from ace_music.errors import AceMusicError
 from ace_music.mcp.loader import load_generator_config
+from ace_music.schemas.audio_contract import (
+    AudioLayerPolicy,
+    AudioSceneContract,
+    MixPolicy,
+    TransitionPolicy,
+)
 from ace_music.schemas.pipeline import PipelineInput
 from ace_music.tools.audio_validator import AudioValidator
 from ace_music.tools.generator import GeneratorConfig
@@ -79,6 +85,30 @@ def _generator_config_from_args(args: argparse.Namespace) -> GeneratorConfig:
     )
 
 
+def _audio_contract_from_args(args: argparse.Namespace) -> AudioSceneContract | None:
+    if (
+        args.target_lufs is None
+        and args.tts_present is None
+        and args.crossfade is None
+    ):
+        return None
+
+    return AudioSceneContract(
+        scene_id="cli_contract",
+        duration_seconds=args.duration,
+        mood="unspecified",
+        layers=AudioLayerPolicy(
+            tts_present=args.tts_present if args.tts_present is not None else True
+        ),
+        transition=TransitionPolicy(
+            crossfade_seconds=args.crossfade if args.crossfade is not None else 1.5
+        ),
+        mix=MixPolicy(
+            target_lufs=args.target_lufs if args.target_lufs is not None else -18.0
+        ),
+    )
+
+
 async def _run_generate(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     started_at = time.monotonic()
     agent = MusicAgent(generator_config=_generator_config_from_args(args))
@@ -102,8 +132,10 @@ async def _run_generate(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
             min_valid_duration_seconds=args.min_valid_duration,
             duration_tolerance_seconds=args.duration_tolerance,
             backend=args.backend,
+            model_variant=args.model_variant,
             mode=args.mode,
             ref_audio=args.ref_audio,
+            audio_contract=_audio_contract_from_args(args),
         )
     )
     elapsed = time.monotonic() - started_at
@@ -243,6 +275,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="MiniMax generation mode",
     )
     generate.add_argument(
+        "--model-variant",
+        default="2b",
+        choices=["2b", "xl-base", "xl-sft", "xl-turbo"],
+        help="ACE-Step model variant for local generation",
+    )
+    generate.add_argument(
         "--ref-audio",
         help="Reference audio file for MiniMax cover mode",
     )
@@ -295,6 +333,14 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument("--expected-sample-rate", type=int, default=48000)
     generate.add_argument("--min-valid-duration", type=float, default=1.0)
     generate.add_argument("--duration-tolerance", type=float, default=5.0)
+    generate.add_argument("--target-lufs", type=float, help="Target output loudness in LUFS")
+    generate.add_argument(
+        "--tts-present",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Whether TTS/dialogue is present in the final mix contract",
+    )
+    generate.add_argument("--crossfade", type=float, help="Scene crossfade duration seconds")
     _add_common_runtime_options(generate)
 
     validate = subparsers.add_parser("validate", help="Validate an existing audio file")
