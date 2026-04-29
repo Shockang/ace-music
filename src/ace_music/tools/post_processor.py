@@ -76,11 +76,25 @@ class PostProcessor(MusicTool[PostProcessInput, ProcessedAudio]):
         duck_gain = 10 ** (-contract.mix.ducking_db / 20.0)
         fade_samples = max(1, int(sr * 0.05))
 
+        merged_ranges: list[tuple[int, int]] = []
+        merge_gap = max(1, int(sr * 0.05))
+
         for segment in contract.tts_segments:
             start = min(sample_count, int(segment.start_seconds * sr))
             end = min(sample_count, int(segment.end_seconds * sr))
             if start >= end:
                 continue
+            if not merged_ranges:
+                merged_ranges.append((start, end))
+                continue
+
+            previous_start, previous_end = merged_ranges[-1]
+            if start <= previous_end + merge_gap:
+                merged_ranges[-1] = (previous_start, max(previous_end, end))
+            else:
+                merged_ranges.append((start, end))
+
+        for start, end in merged_ranges:
             entry_end = min(sample_count, start + fade_samples)
             if start < entry_end:
                 entry_ramp = np.linspace(1.0, duck_gain, entry_end - start, endpoint=False)

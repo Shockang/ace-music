@@ -335,6 +335,37 @@ class TestDuckingHelpers:
         assert pre > inside_start
         assert inside_end < near_exit < recovered
 
+    def test_apply_ducking_keeps_adjacent_tts_segments_continuously_ducked(self):
+        np = pytest.importorskip("numpy")
+
+        processor = PostProcessor()
+        sample_rate = 48000
+        duration = 5.0
+        data = np.full((int(sample_rate * duration), 2), 0.5, dtype=np.float32)
+        contract = AudioSceneContract(
+            scene_id="scene_adjacent",
+            duration_seconds=duration,
+            mood="calm",
+            tts_segments=[
+                TTSSegment(start_seconds=1.0, end_seconds=1.2),
+                TTSSegment(start_seconds=1.2, end_seconds=1.4),
+            ],
+        )
+
+        processed = processor._apply_ducking(data.copy(), sample_rate, contract)
+        first_end = np.sqrt(
+            np.mean(processed[int(1.15 * sample_rate) : int(1.19 * sample_rate)] ** 2)
+        )
+        join = np.sqrt(
+            np.mean(processed[int(1.195 * sample_rate) : int(1.205 * sample_rate)] ** 2)
+        )
+        second_start = np.sqrt(
+            np.mean(processed[int(1.21 * sample_rate) : int(1.24 * sample_rate)] ** 2)
+        )
+
+        assert join <= first_end * 1.05
+        assert second_start <= first_end * 1.05
+
 
 class TestInputValidation:
     def test_validate_post_process_input(self, processor, mock_audio):
