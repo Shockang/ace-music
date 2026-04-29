@@ -105,6 +105,9 @@ class StableAudioGenerator(MusicTool[StableAudioInput, AudioOutput]):
             response.raise_for_status()
             filepath.write_bytes(response.content)
 
+        if response.content[:3] != b"ID3" and not response.content.startswith(b"RIFF"):
+            raise GenerationFailedError("Downloaded payload is not a recognized audio file")
+
         return str(filepath)
 
     def _build_payload(self, input_data: StableAudioInput) -> dict[str, Any]:
@@ -114,6 +117,16 @@ class StableAudioGenerator(MusicTool[StableAudioInput, AudioOutput]):
             "output_format": self._config.audio_format,
         }
 
+    def _extract_audio_url(self, result: dict[str, Any]) -> str:
+        status = str(result.get("status", "")).lower()
+        if status and status not in {"succeeded", "completed", "complete"}:
+            raise GenerationFailedError(f"Stable Audio generation not ready: status={status}")
+
+        audio_url = result.get("audio_url") or result.get("result", {}).get("audio_url")
+        if not audio_url:
+            raise GenerationFailedError("Stable Audio response missing audio_url")
+        return audio_url
+
     async def execute(self, input_data: StableAudioInput) -> AudioOutput:
         try:
             submitted = await self._submit_job(self._build_payload(input_data))
@@ -122,10 +135,7 @@ class StableAudioGenerator(MusicTool[StableAudioInput, AudioOutput]):
                 raise GenerationFailedError("Stable Audio response missing job id")
 
             polled = await self._poll_job(job_id)
-            audio_url = polled.get("audio_url") or polled.get("result", {}).get("audio_url")
-            if not audio_url:
-                raise GenerationFailedError("Stable Audio response missing audio_url")
-
+            audio_url = self._extract_audio_url(polled)
             audio_path = await self._download_audio(audio_url, input_data.output_dir)
         except httpx.HTTPError as exc:
             raise GenerationFailedError(f"Stable Audio API request failed: {exc}") from exc
