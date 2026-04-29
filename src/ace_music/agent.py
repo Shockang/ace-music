@@ -284,7 +284,11 @@ class MusicAgent:
             0, 2**32 - 1
         )
         contract = input_data.audio_contract
-        mapped_audio = map_scene_contract(contract) if contract else None
+        mapped_audio = (
+            None
+            if input_data.passthrough_audio_contract
+            else map_scene_contract(contract) if contract else None
+        )
 
         # MiniMax backend: simplified pipeline
         if input_data.backend == "minimax":

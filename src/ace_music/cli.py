@@ -109,6 +109,14 @@ def _audio_contract_from_args(args: argparse.Namespace) -> AudioSceneContract | 
     )
 
 
+def _has_partial_contract_flags(args: argparse.Namespace) -> bool:
+    return (
+        args.target_lufs is not None
+        or args.tts_present is not None
+        or args.crossfade is not None
+    )
+
+
 async def _run_generate(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     started_at = time.monotonic()
     agent = MusicAgent(generator_config=_generator_config_from_args(args))
@@ -136,6 +144,7 @@ async def _run_generate(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
             mode=args.mode,
             ref_audio=args.ref_audio,
             audio_contract=_audio_contract_from_args(args),
+            passthrough_audio_contract=_has_partial_contract_flags(args),
         )
     )
     elapsed = time.monotonic() - started_at

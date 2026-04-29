@@ -45,6 +45,13 @@ class PipelineInput(BaseModel):
         default=None,
         description="Structured scene/video audio contract from upstream orchestration",
     )
+    passthrough_audio_contract: bool = Field(
+        default=False,
+        description=(
+            "Whether audio_contract should be passed through to downstream mix/post-processing "
+            "without scene-to-style mapping"
+        ),
+    )
     material_context: MaterialContext | None = Field(
         default=None,
         description="Daily material context (inspiration, lyrics, style) driving this generation",

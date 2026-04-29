@@ -140,6 +140,33 @@ class TestMusicAgentPipeline:
         persisted = json.loads(metadata_path.read_text())
         assert persisted["audio_contract"]["scene_id"] == "scene_meta"
 
+    @pytest.mark.asyncio
+    async def test_passthrough_audio_contract_skips_scene_mapping(self, agent, tmp_path):
+        contract = AudioSceneContract(
+            scene_id="cli_contract",
+            mood="unspecified",
+            duration_seconds=5.0,
+            layers={"tts_present": False},
+            transition={"crossfade_seconds": 2.25},
+            mix={"target_lufs": -14.0},
+        )
+
+        result = await agent.run(
+            PipelineInput(
+                description="background music",
+                duration_seconds=5.0,
+                is_instrumental=True,
+                audio_contract=contract,
+                passthrough_audio_contract=True,
+                output_dir=str(tmp_path),
+            )
+        )
+
+        assert result.metadata["audio_contract"]["scene_id"] == "cli_contract"
+        assert "mapped_audio" not in result.metadata
+        assert "mix" not in result.metadata
+        assert "qa_targets" not in result.metadata
+
 
 class TestDirectorBridge:
     def test_request_to_pipeline_input(self):
