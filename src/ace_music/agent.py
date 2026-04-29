@@ -62,7 +62,8 @@ class MusicAgent:
     ) -> None:
         self._lyrics_planner = LyricsPlanner()
         self._style_planner = StylePlanner()
-        self._generator = ACEStepGenerator(generator_config)
+        self._generator_config = generator_config or GeneratorConfig()
+        self._generator_cache: dict[str, ACEStepGenerator] = {}
         self._minimax_generator: MiniMaxMusicGenerator | None = None
         self._post_processor = PostProcessor()
         self._output_worker = OutputWorker()
@@ -70,6 +71,13 @@ class MusicAgent:
         self._preset_resolver = preset_resolver or PresetResolver()
         # TODO: Wire FeatureRouter into lyrics_planner/style_planner for LLM-assisted planning
         self._feature_router = feature_router
+
+    def _resolve_generator(self, model_variant: str) -> ACEStepGenerator:
+        """Resolve an ACE-Step generator instance for the requested model variant."""
+        if model_variant not in self._generator_cache:
+            config = self._generator_config.model_copy(update={"model_variant": model_variant})
+            self._generator_cache[model_variant] = ACEStepGenerator(config)
+        return self._generator_cache[model_variant]
 
     def _build_plan(self, input_data: PipelineInput) -> list[str]:
         """Build execution plan from input. Returns list of tool names to execute."""
@@ -400,7 +408,7 @@ class MusicAgent:
         )
         audio_output = await self._run_stage(
             "generator",
-            lambda: self._generator.execute_sync(gen_input),
+            lambda: self._resolve_generator(input_data.model_variant).execute_sync(gen_input),
             input_data.generation_timeout_seconds or stage_timeout,
             workspace,
             run_id,
@@ -667,7 +675,9 @@ class MusicAgent:
                 )
                 audio_output = await self._run_stage(
                     "generator",
-                    lambda: self._generator.execute_sync(gen_input),
+                    lambda: self._resolve_generator(input_data.model_variant).execute_sync(
+                        gen_input
+                    ),
                     input_data.generation_timeout_seconds or stage_timeout,
                     workspace,
                     run_id,

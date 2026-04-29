@@ -11,11 +11,16 @@ from ace_music.bridge import DirectorBridge
 from ace_music.bridge.director_bridge import pipeline_output_to_response, request_to_pipeline_input
 from ace_music.providers.deepseek import DeepSeekProvider
 from ace_music.providers.router import FeatureRouter
+from ace_music.schemas.audio import AudioOutput, ProcessedAudio
 from ace_music.schemas.audio_contract import AudioSceneContract
 from ace_music.schemas.output_config import OutputConfig
 from ace_music.schemas.pipeline import PipelineInput, PipelineOutput
+from ace_music.tools.audio_validator import ValidationResult
 from ace_music.tools.generator import GeneratorConfig
+from ace_music.tools.output import OutputResult
 from ace_music.tools.preset_resolver import PresetResolver
+from ace_music.schemas.lyrics import LyricsOutput
+from ace_music.schemas.style import StyleOutput
 
 
 @pytest.fixture
@@ -27,6 +32,11 @@ def agent():
 
 
 class TestMusicAgentPipeline:
+    def test_pipeline_input_model_variant_defaults_to_2b(self):
+        input_data = PipelineInput(description="default variant check")
+
+        assert input_data.model_variant == "2b"
+
     @pytest.mark.asyncio
     async def test_full_pipeline_with_lyrics(self, agent, tmp_path):
         result = await agent.run(
@@ -322,6 +332,93 @@ class TestAgentWithFeatureRouter:
         )
         assert result.audio_path
         assert Path(result.audio_path).exists()
+
+
+class TestAgentModelVariantSelection:
+    @pytest.mark.asyncio
+    async def test_agent_resolves_generator_per_pipeline_input_model_variant(self, tmp_path, monkeypatch):
+        generator_variants: list[str] = []
+
+        class FakeGenerator:
+            def __init__(self, config):
+                generator_variants.append(config.model_variant)
+
+            def execute_sync(self, _input_data):
+                output_path = tmp_path / f"generated_{len(generator_variants)}.wav"
+                output_path.write_text("placeholder")
+                return AudioOutput(
+                    file_path=str(output_path),
+                    duration_seconds=5.0,
+                    sample_rate=48000,
+                    format="wav",
+                    channels=2,
+                )
+
+        monkeypatch.setattr("ace_music.agent.ACEStepGenerator", FakeGenerator)
+
+        agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
+
+        async def fake_lyrics_execute(_input_data):
+            return LyricsOutput(formatted_lyrics="", is_instrumental=True)
+
+        async def fake_style_execute(_input_data, preset=None):
+            return StyleOutput(prompt="test prompt")
+
+        async def fake_post_process(_input_data):
+            return ProcessedAudio(
+                file_path=str(tmp_path / "processed.wav"),
+                duration_seconds=5.0,
+                sample_rate=48000,
+                format="wav",
+                channels=2,
+            )
+
+        async def fake_output_execute(_input_data):
+            return OutputResult(
+                audio_path=str(tmp_path / "final.wav"),
+                metadata_path=None,
+                duration_seconds=5.0,
+                format="wav",
+                sample_rate=48000,
+                metadata={},
+            )
+
+        def fake_validate(file_path, **_kwargs):
+            return ValidationResult(
+                file_path=file_path,
+                is_valid=True,
+                format="wav",
+                sample_rate=48000,
+                channels=2,
+                duration_seconds=5.0,
+                file_size_bytes=2048,
+                errors=[],
+            )
+
+        agent._lyrics_planner.execute = fake_lyrics_execute
+        agent._style_planner.execute = fake_style_execute
+        agent._post_processor.execute = fake_post_process
+        agent._output_worker.execute = fake_output_execute
+        agent._audio_validator.validate = fake_validate
+
+        await agent.run(
+            PipelineInput(
+                description="first variant",
+                duration_seconds=5.0,
+                output_dir=str(tmp_path / "first"),
+                model_variant="2b",
+            )
+        )
+        await agent.run(
+            PipelineInput(
+                description="second variant",
+                duration_seconds=5.0,
+                output_dir=str(tmp_path / "second"),
+                model_variant="xl-sft",
+            )
+        )
+
+        assert generator_variants == ["2b", "xl-sft"]
 
 
 class TestDirectorBridgeEnhanced:

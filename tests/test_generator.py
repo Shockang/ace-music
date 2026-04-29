@@ -2,10 +2,12 @@
 
 import builtins
 import os
+from pathlib import Path
 
 import pytest
 
-from ace_music.errors import DependencyUnavailableError
+from ace_music.errors import DependencyUnavailableError, GPUUnavailableError
+from ace_music.mcp.loader import load_generator_config
 from ace_music.schemas.audio import AudioOutput
 from ace_music.schemas.lyrics import LyricsOutput
 from ace_music.schemas.style import StyleOutput
@@ -38,6 +40,25 @@ class TestGeneratorProperties:
 
     def test_is_not_concurrency_safe(self, generator):
         assert generator.is_concurrency_safe is False
+
+    def test_generator_config_model_variant_defaults_to_2b(self):
+        config = GeneratorConfig()
+        assert config.model_variant == "2b"
+
+    def test_load_generator_config_accepts_model_variant(self, tmp_path):
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(
+            "model:\n"
+            "  checkpoint_dir: /models/ace-step\n"
+            "  model_variant: xl-sft\n"
+            "  cpu_offload: true\n"
+        )
+
+        config = load_generator_config(config_path)
+
+        assert config.model_variant == "xl-sft"
+        assert config.checkpoint_dir == "/models/ace-step"
+        assert config.cpu_offload is True
 
 
 class TestMockGeneration:
@@ -134,3 +155,33 @@ class TestProductionModeDiagnostics:
         generator._ensure_pipeline()
 
         assert generator._pipeline == "mock"
+
+
+class TestModelVariantBehavior:
+    def test_xl_model_variant_resolves_checkpoint_subdir(self):
+        generator = ACEStepGenerator(
+            GeneratorConfig(
+                checkpoint_dir="/models/ace-step",
+                model_variant="xl-base",
+                mock_mode=False,
+            )
+        )
+
+        resolved = generator._resolve_checkpoint_dir()
+
+        assert resolved == Path("/models/ace-step/xl-base")
+
+    def test_xl_model_variant_requires_sufficient_vram(self):
+        generator = ACEStepGenerator(
+            GeneratorConfig(
+                model_variant="xl-turbo",
+                cpu_offload=False,
+                mock_mode=False,
+            )
+        )
+
+        with pytest.raises(GPUUnavailableError) as exc:
+            generator._validate_model_variant_vram(available_vram_gb=19.5)
+
+        assert "xl-turbo" in str(exc.value)
+        assert "20GB" in str(exc.value)

@@ -11,7 +11,7 @@ import logging
 import random
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -47,6 +47,10 @@ class GeneratorConfig(BaseModel):
     torch_compile: bool = False
     cpu_offload: bool = False
     overlapped_decode: bool = False
+    model_variant: Literal["2b", "xl-base", "xl-sft", "xl-turbo"] = Field(
+        default="2b",
+        description="ACE-Step model variant to load",
+    )
     mock_mode: bool = Field(
         default=False, description="Use mock generator (no GPU required)"
     )
@@ -116,6 +120,55 @@ class ACEStepGenerator(MusicTool[GenerationInput, AudioOutput]):
                 "setup supports it."
             )
 
+    def _resolve_checkpoint_dir(self) -> str | Path | None:
+        """Resolve the checkpoint directory for the configured model variant."""
+        checkpoint_dir = self._config.checkpoint_dir
+        if checkpoint_dir is None or self._config.model_variant == "2b":
+            return checkpoint_dir
+        return Path(checkpoint_dir) / self._config.model_variant
+
+    def _validate_model_variant_vram(
+        self,
+        available_vram_gb: float | None = None,
+    ) -> None:
+        """Validate VRAM requirements for XL ACE-Step variants."""
+        if self._config.mock_mode or self._config.model_variant == "2b":
+            return
+
+        required_vram_gb = 12.0 if self._config.cpu_offload else 20.0
+        detected_vram_gb = (
+            available_vram_gb
+            if available_vram_gb is not None
+            else self._detect_available_vram_gb()
+        )
+
+        if detected_vram_gb < required_vram_gb:
+            raise GPUUnavailableError(
+                f"ACE-Step variant {self._config.model_variant!r} requires at least "
+                f"{required_vram_gb:.0f}GB VRAM"
+                f"{' when cpu_offload=True' if self._config.cpu_offload else ''}; "
+                f"detected {detected_vram_gb:.1f}GB on CUDA device {self._config.device_id}."
+            )
+
+    def _detect_available_vram_gb(self) -> float:
+        """Inspect the selected CUDA device's total VRAM in GB."""
+        try:
+            import torch
+        except ImportError as exc:
+            raise DependencyUnavailableError(
+                "PyTorch is required to inspect ACE-Step GPU requirements. Install with "
+                "`pip install -e '.[model]'` or run with mock mode for CPU-only smoke tests."
+            ) from exc
+
+        if not torch.cuda.is_available():
+            raise GPUUnavailableError(
+                f"CUDA GPU is not available. ACE-Step variant {self._config.model_variant!r} "
+                "requires a CUDA GPU with sufficient VRAM; use mock mode for smoke tests."
+            )
+
+        props = torch.cuda.get_device_properties(self._config.device_id)
+        return props.total_memory / (1024**3)
+
     def _ensure_pipeline(self) -> Any:
         """Load the ACE-Step pipeline (singleton pattern)."""
         if self._pipeline is not None:
@@ -127,13 +180,15 @@ class ACEStepGenerator(MusicTool[GenerationInput, AudioOutput]):
             return self._pipeline
 
         self._ensure_cuda_available()
+        self._validate_model_variant_vram()
+        resolved_checkpoint_dir = self._resolve_checkpoint_dir()
 
         # Lazy import to avoid requiring torch at module level
         try:
             from acestep.pipeline_ace_step import ACEStepPipeline
 
             self._pipeline = ACEStepPipeline(
-                checkpoint_dir=self._config.checkpoint_dir,
+                checkpoint_dir=resolved_checkpoint_dir,
                 device_id=self._config.device_id,
                 dtype=self._config.dtype,
                 torch_compile=self._config.torch_compile,

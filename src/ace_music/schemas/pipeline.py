@@ -85,6 +85,10 @@ class PipelineInput(BaseModel):
         default="acestep",
         description="Generation backend: 'acestep' (local model) or 'minimax' (cloud API)",
     )
+    model_variant: Literal["2b", "xl-base", "xl-sft", "xl-turbo"] = Field(
+        default="2b",
+        description="ACE-Step model variant to use for local generation",
+    )
     mode: Literal["instrumental", "lyrics", "cover"] = Field(
         default="instrumental",
         description="MiniMax generation mode: 'instrumental', 'lyrics', or 'cover'",

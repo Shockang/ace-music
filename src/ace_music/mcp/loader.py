@@ -36,6 +36,8 @@ def load_model_config(config_path: str | Path | None = None) -> ModelConfig:
         torch_compile=model_section.get("torch_compile", False),
         cpu_offload=model_section.get("cpu_offload", False),
         overlapped_decode=model_section.get("overlapped_decode", False),
+        model_variant=model_section.get("model_variant", "2b"),
+        mock_mode=model_section.get("mock_mode", False),
     )
 
 
@@ -49,5 +51,6 @@ def load_generator_config(config_path: str | Path | None = None) -> GeneratorCon
         torch_compile=model_cfg.torch_compile,
         cpu_offload=model_cfg.cpu_offload,
         overlapped_decode=model_cfg.overlapped_decode,
+        model_variant=model_cfg.model_variant,
         mock_mode=model_cfg.mock_mode,
     )

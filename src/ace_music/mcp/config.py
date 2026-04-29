@@ -1,6 +1,7 @@
 """Model and GPU configuration."""
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -19,6 +20,10 @@ class ModelConfig(BaseModel):
     )
     cpu_offload: bool = Field(default=False, description="Offload model to CPU to save VRAM (~8GB)")
     overlapped_decode: bool = Field(default=False, description="Overlapped vocoder decoding")
+    model_variant: Literal["2b", "xl-base", "xl-sft", "xl-turbo"] = Field(
+        default="2b",
+        description="ACE-Step model variant to load",
+    )
     mock_mode: bool = Field(default=False, description="Mock mode for testing without GPU")
 
     @property
