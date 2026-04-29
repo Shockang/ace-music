@@ -1,5 +1,6 @@
 """Tests for the ace-music CLI."""
 
+import argparse
 import json
 import subprocess
 import sys
@@ -96,6 +97,24 @@ def test_cli_generation_timeout_returns_structured_error(tmp_path):
 def test_child_context_name_uses_spawn_on_darwin():
     with patch.object(cli.sys, "platform", "darwin"):
         assert cli._child_context_name() == "spawn"
+
+
+def test_generate_parser_exposes_no_tts_flag_name():
+    parser = cli.build_parser()
+    subparsers = next(
+        action
+        for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction)
+    )
+    generate_parser = subparsers.choices["generate"]
+    option_strings = [
+        option
+        for action in generate_parser._actions
+        if action.dest == "tts_present"
+        for option in action.option_strings
+    ]
+
+    assert option_strings == ["--tts-present", "--no-tts"]
 
 
 @pytest.mark.asyncio
@@ -231,7 +250,7 @@ async def test_run_generate_sets_tts_present_false_for_no_tts_flag(tmp_path):
             "12",
             "--output-dir",
             str(tmp_path),
-            "--no-tts-present",
+            "--no-tts",
         ]
     )
     captured: dict[str, object] = {}

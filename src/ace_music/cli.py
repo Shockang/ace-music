@@ -345,9 +345,16 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument("--target-lufs", type=float, help="Target output loudness in LUFS")
     generate.add_argument(
         "--tts-present",
-        action=argparse.BooleanOptionalAction,
+        dest="tts_present",
+        action="store_true",
         default=None,
         help="Whether TTS/dialogue is present in the final mix contract",
+    )
+    generate.add_argument(
+        "--no-tts",
+        dest="tts_present",
+        action="store_false",
+        help="Declare that TTS/dialogue is not present in the final mix contract",
     )
     generate.add_argument("--crossfade", type=float, help="Scene crossfade duration seconds")
     _add_common_runtime_options(generate)
