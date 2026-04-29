@@ -278,8 +278,19 @@ class MusicAgent:
         seed = input_data.seed if input_data.seed is not None else random.randint(0, 2**32 - 1)
         stage_timeout = input_data.stage_timeout_seconds
 
+        if input_data.mode != "instrumental" or input_data.lyrics or input_data.ref_audio:
+            raise GenerationFailedError(
+                "Stable Audio backend only supports instrumental generation and does not accept "
+                "lyrics or reference audio inputs."
+            )
+
         if self._stable_audio_generator is None:
-            self._stable_audio_generator = StableAudioGenerator()
+            try:
+                self._stable_audio_generator = StableAudioGenerator()
+            except ValueError as exc:
+                raise GenerationFailedError(
+                    f"Stable Audio configuration error: {exc}"
+                ) from exc
 
         if workspace and run_id and not workspace.manifest_exists(run_id):
             workspace.create_run(run_id, description=input_data.description, seed=seed)
@@ -329,6 +340,13 @@ class MusicAgent:
             workspace,
             run_id,
         )
+        if workspace and run_id:
+            workspace.update_artifact(
+                run_id,
+                "output",
+                ArtifactStatus.COMPLETED,
+                file_path=result.audio_path,
+            )
         result.metadata["backend"] = "stable_audio"
         result.metadata["elapsed_seconds"] = round(time.monotonic() - pipeline_started_at, 2)
 

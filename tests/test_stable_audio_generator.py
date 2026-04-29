@@ -75,7 +75,17 @@ class TestStableAudioGenerator:
                 new_callable=AsyncMock,
                 return_value={"status": "processing"},
             ),
-        ), pytest.raises(GenerationFailedError, match="not ready"):
+            pytest.raises(GenerationFailedError, match="not ready"),
+        ):
+            await gen.execute(StableAudioInput(description="test", output_dir=str(tmp_path)))
+
+    @pytest.mark.asyncio
+    async def test_execute_raises_for_missing_api_key(self, tmp_path):
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            pytest.raises(ValueError, match="Stability API key required"),
+        ):
+            gen = StableAudioGenerator(config=StableAudioConfig(api_key=""))
             await gen.execute(
                 StableAudioInput(description="test", output_dir=str(tmp_path))
             )

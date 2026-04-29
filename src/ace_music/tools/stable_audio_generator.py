@@ -103,10 +103,12 @@ class StableAudioGenerator(MusicTool[StableAudioInput, AudioOutput]):
         async with httpx.AsyncClient(timeout=self._config.timeout) as client:
             response = await client.get(url)
             response.raise_for_status()
-            filepath.write_bytes(response.content)
+            content = response.content
 
-        if response.content[:3] != b"ID3" and not response.content.startswith(b"RIFF"):
+        if content[:3] != b"ID3" and not content.startswith(b"RIFF"):
             raise GenerationFailedError("Downloaded payload is not a recognized audio file")
+
+        filepath.write_bytes(content)
 
         return str(filepath)
 
@@ -139,6 +141,8 @@ class StableAudioGenerator(MusicTool[StableAudioInput, AudioOutput]):
             audio_path = await self._download_audio(audio_url, input_data.output_dir)
         except httpx.HTTPError as exc:
             raise GenerationFailedError(f"Stable Audio API request failed: {exc}") from exc
+        except ValueError as exc:
+            raise GenerationFailedError(f"Stable Audio configuration error: {exc}") from exc
 
         return AudioOutput(
             file_path=audio_path,

@@ -9,7 +9,7 @@ import pytest
 from ace_music.agent import MusicAgent
 from ace_music.bridge import DirectorBridge
 from ace_music.bridge.director_bridge import pipeline_output_to_response, request_to_pipeline_input
-from ace_music.errors import OutputValidationError
+from ace_music.errors import GenerationFailedError, OutputValidationError
 from ace_music.providers.deepseek import DeepSeekProvider
 from ace_music.providers.router import FeatureRouter
 from ace_music.schemas.audio import AudioOutput, ProcessedAudio
@@ -826,6 +826,41 @@ class TestStableAudioBackend:
 
         assert result.metadata["backend"] == "stable_audio"
         assert result.audio_path.endswith(".mp3")
+
+    @pytest.mark.asyncio
+    async def test_pipeline_rejects_unsupported_stable_audio_inputs(self, tmp_path):
+        agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
+
+        with pytest.raises(GenerationFailedError, match="only supports instrumental"):
+            await agent.run(
+                PipelineInput(
+                    description="cinematic underscore",
+                    duration_seconds=5.0,
+                    backend="stable_audio",
+                    mode="lyrics",
+                    lyrics="hello world",
+                    output_dir=str(tmp_path),
+                )
+            )
+
+    @pytest.mark.asyncio
+    async def test_pipeline_surfaces_stable_audio_configuration_error(self, tmp_path, monkeypatch):
+        agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
+
+        def fake_generator():
+            raise ValueError("missing STABILITY_API_KEY")
+
+        monkeypatch.setattr("ace_music.agent.StableAudioGenerator", fake_generator)
+
+        with pytest.raises(GenerationFailedError, match="configuration error"):
+            await agent.run(
+                PipelineInput(
+                    description="cinematic underscore",
+                    duration_seconds=5.0,
+                    backend="stable_audio",
+                    output_dir=str(tmp_path),
+                )
+            )
 
 
 class TestPipelineManifest:
