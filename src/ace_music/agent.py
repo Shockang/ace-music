@@ -260,24 +260,15 @@ class MusicAgent:
             metadata=result.metadata,
         )
 
-    async def run(
+    async def _run_local_pipeline(
         self,
         input_data: PipelineInput,
         workspace: WorkspaceManager | None = None,
         run_id: str | None = None,
+        *,
+        preset=None,
+        style_output=None,
     ) -> PipelineOutput:
-        """Execute the full music generation pipeline.
-
-        Args:
-            input_data: Pipeline input with description, style, duration, etc.
-            workspace: Optional workspace for manifest tracking.
-            run_id: Optional run ID for manifest tracking.
-
-        Returns:
-            PipelineOutput with final audio path and metadata.
-        """
-        plan = self._build_plan(input_data)
-        logger.info("Pipeline plan: %s", " -> ".join(plan))
         pipeline_started_at = time.monotonic()
         stage_timeout = input_data.stage_timeout_seconds
         seed = input_data.seed if input_data.seed is not None else random.randint(
@@ -290,11 +281,6 @@ class MusicAgent:
             else map_scene_contract(contract) if contract else None
         )
 
-        # MiniMax backend: simplified pipeline
-        if input_data.backend == "minimax":
-            return await self._run_minimax_pipeline(input_data, workspace, run_id)
-
-        # Extract material context for pipeline enrichment
         material = input_data.material_context
         material_description = ""
         material_mood = None
@@ -309,11 +295,6 @@ class MusicAgent:
                 for tag in entry.tags:
                     if tag not in material_style_tags:
                         material_style_tags.append(tag)
-            logger.info(
-                "Material consumed: %d entries from %s",
-                len(material.entries),
-                material.source_files,
-            )
         elif material and material.is_empty:
             logger.warning(
                 "Material context provided but contains 0 entries — treating as no material"
@@ -339,7 +320,7 @@ class MusicAgent:
         if workspace and run_id and not workspace.manifest_exists(run_id):
             workspace.create_run(run_id, description=input_data.description, seed=seed)
 
-        # Stage 1: Lyrics planning
+        plan = self._build_plan(input_data)
         lyrics_output = None
         if "lyrics_planner" in plan:
             from ace_music.schemas.lyrics import LyricsInput
@@ -356,62 +337,56 @@ class MusicAgent:
                 workspace,
                 run_id,
             )
-            logger.info(
-                "Lyrics: %d segments, instrumental=%s",
-                len(lyrics_output.segments),
-                lyrics_output.is_instrumental,
-            )
             if workspace and run_id:
                 workspace.update_artifact(run_id, "lyrics_planner", ArtifactStatus.COMPLETED)
 
-        # Stage 2: Style planning
-        from ace_music.schemas.style import StyleInput
+        if style_output is None:
+            from ace_music.schemas.style import StyleInput
 
-        # Resolve preset if specified
-        preset = None
-        if input_data.preset_name:
-            match = await self._preset_resolver.resolve(input_data.preset_name)
-            if match:
-                preset = match.preset
-                logger.info("Resolved preset: %s (confidence=%.2f)", preset.id, match.confidence)
-            else:
-                logger.warning(
-                    "Preset '%s' not found, using heuristic style",
-                    input_data.preset_name,
-                )
+            if preset is None and input_data.preset_name:
+                match = await self._preset_resolver.resolve(input_data.preset_name)
+                if match:
+                    preset = match.preset
+                else:
+                    logger.warning(
+                        "Preset '%s' not found, using heuristic style",
+                        input_data.preset_name,
+                    )
 
-        style_input = StyleInput(
-            description=material_description or effective_description,
-            reference_tags=effective_style_tags + material_style_tags,
-            tempo_preference=effective_tempo,
-            mood=material_mood or effective_mood,
-        )
-        style_output = await self._run_stage(
-            "style_planner",
-            self._style_planner.execute(style_input, preset=preset),
-            stage_timeout,
-            workspace,
-            run_id,
-        )
-
-        # Apply user overrides
-        if effective_guidance is not None:
-            style_output = style_output.model_copy(
-                update={"guidance_scale": effective_guidance}
+            style_input = StyleInput(
+                description=material_description or effective_description,
+                reference_tags=effective_style_tags + material_style_tags,
+                tempo_preference=effective_tempo,
+                mood=material_mood or effective_mood,
             )
+            style_output = await self._run_stage(
+                "style_planner",
+                self._style_planner.execute(style_input, preset=preset),
+                stage_timeout,
+                workspace,
+                run_id,
+            )
+        else:
+            prompt_tags = [tag.strip() for tag in style_output.prompt.split(",") if tag.strip()]
+            merged_tags = list(effective_style_tags)
+            for tag in prompt_tags:
+                if tag not in merged_tags:
+                    merged_tags.append(tag)
+            style_output = style_output.model_copy(update={"prompt": ", ".join(merged_tags)})
+
+        if effective_guidance is not None:
+            style_output = style_output.model_copy(update={"guidance_scale": effective_guidance})
         if input_data.infer_step is not None:
             style_output = style_output.model_copy(update={"infer_step": input_data.infer_step})
 
-        logger.info("Style: prompt=%r, guidance=%.1f, steps=%d",
-                     style_output.prompt, style_output.guidance_scale, style_output.infer_step)
         if workspace and run_id:
             workspace.update_artifact(run_id, "style_planner", ArtifactStatus.COMPLETED)
 
-        # Stage 3: Generation
         from ace_music.schemas.lyrics import LyricsOutput
 
         gen_input = GenerationInput(
-            lyrics=lyrics_output or LyricsOutput(
+            lyrics=lyrics_output
+            or LyricsOutput(
                 formatted_lyrics="",
                 is_instrumental=input_data.is_instrumental,
             ),
@@ -428,15 +403,11 @@ class MusicAgent:
             workspace,
             run_id,
         )
-        logger.info("Generated: %s (%.1fs)", audio_output.file_path, audio_output.duration_seconds)
         if workspace and run_id:
             workspace.update_artifact(
-                run_id, "generator", ArtifactStatus.COMPLETED,
-                file_path=audio_output.file_path,
+                run_id, "generator", ArtifactStatus.COMPLETED, file_path=audio_output.file_path
             )
 
-        # Stage 4: Post-processing
-        # Merge emotion-mapped mix parameters into contract for downstream consumption
         effective_contract = contract
         if mapped_audio and contract:
             effective_contract = contract.model_copy(update={"mix": mapped_audio.mix})
@@ -454,7 +425,6 @@ class MusicAgent:
             workspace,
             run_id,
         )
-        logger.info("Post-processed: %s", processed.file_path)
         if workspace and run_id:
             workspace.update_artifact(run_id, "post_processor", ArtifactStatus.COMPLETED)
 
@@ -469,18 +439,8 @@ class MusicAgent:
             message = "Post-processed audio failed validation: " + "; ".join(
                 processed_validation.errors
             )
-            logger.error(message)
-            if workspace and run_id:
-                workspace.update_artifact(
-                    run_id,
-                    "post_processor",
-                    ArtifactStatus.FAILED,
-                    file_path=processed.file_path,
-                    error_message=message,
-                )
             raise OutputValidationError(message, processed_validation.errors)
 
-        # Stage 5: Output
         extra_metadata: dict = {}
         if contract:
             extra_metadata["audio_contract"] = contract.model_dump(mode="json")
@@ -520,35 +480,26 @@ class MusicAgent:
         )
         if not final_validation.is_valid:
             message = "Final audio failed validation: " + "; ".join(final_validation.errors)
-            logger.error(message)
-            if workspace and run_id:
-                workspace.update_artifact(
-                    run_id,
-                    "output",
-                    ArtifactStatus.FAILED,
-                    file_path=result.audio_path,
-                    error_message=message,
-                )
             raise OutputValidationError(message, final_validation.errors)
 
         result.metadata["validation"] = final_validation.model_dump()
         result.metadata["elapsed_seconds"] = round(time.monotonic() - pipeline_started_at, 2)
-        logger.info("Output: %s", result.audio_path)
         if workspace and run_id:
             workspace.update_artifact(
                 run_id, "output", ArtifactStatus.COMPLETED, file_path=result.audio_path
             )
 
-        # Build pipeline output
         segments_info = []
         if lyrics_output and lyrics_output.segments:
             for seg in lyrics_output.segments:
-                segments_info.append({
-                    "type": seg.segment_type.value,
-                    "lines": seg.lines,
-                    "time_start": seg.time_start,
-                    "time_end": seg.time_end,
-                })
+                segments_info.append(
+                    {
+                        "type": seg.segment_type.value,
+                        "lines": seg.lines,
+                        "time_start": seg.time_start,
+                        "time_end": seg.time_end,
+                    }
+                )
 
         return PipelineOutput(
             audio_path=result.audio_path,
@@ -558,6 +509,30 @@ class MusicAgent:
             metadata=result.metadata,
             segments=segments_info,
         )
+
+    async def run(
+        self,
+        input_data: PipelineInput,
+        workspace: WorkspaceManager | None = None,
+        run_id: str | None = None,
+    ) -> PipelineOutput:
+        """Execute the full music generation pipeline.
+
+        Args:
+            input_data: Pipeline input with description, style, duration, etc.
+            workspace: Optional workspace for manifest tracking.
+            run_id: Optional run ID for manifest tracking.
+
+        Returns:
+            PipelineOutput with final audio path and metadata.
+        """
+        plan = self._build_plan(input_data)
+        logger.info("Pipeline plan: %s", " -> ".join(plan))
+
+        # MiniMax backend: simplified pipeline
+        if input_data.backend == "minimax":
+            return await self._run_minimax_pipeline(input_data, workspace, run_id)
+        return await self._run_local_pipeline(input_data, workspace=workspace, run_id=run_id)
 
     async def run_sequence(
         self,
@@ -586,14 +561,11 @@ class MusicAgent:
 
         results: list[PipelineOutput] = []
         for input_data, style_output in zip(inputs, style_outputs, strict=True):
-            result = await self.run(
-                input_data.model_copy(
-                    update={
-                        "style_tags": style_output.prompt.split(", "),
-                        "guidance_scale": style_output.guidance_scale,
-                    }
-                ),
+            result = await self._run_local_pipeline(
+                input_data,
                 workspace=workspace,
+                preset=None,
+                style_output=style_output,
             )
             results.append(result)
 

@@ -191,9 +191,18 @@ class TestMusicAgentPipeline:
     async def test_run_sequence_applies_sequence_guidance_to_pipeline(self, tmp_path):
         agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
         captured_guidance: list[float] = []
+        captured_style_tags: list[list[str]] = []
 
-        async def fake_run(input_data, workspace=None, run_id=None):
-            captured_guidance.append(input_data.guidance_scale)
+        async def fake_run_local_pipeline(
+            input_data,
+            *,
+            workspace=None,
+            run_id=None,
+            preset=None,
+            style_output=None,
+        ):
+            captured_guidance.append(style_output.guidance_scale)
+            captured_style_tags.append(style_output.prompt.split(", "))
             return PipelineOutput(
                 audio_path=str(tmp_path / f"{len(captured_guidance)}.wav"),
                 duration_seconds=5.0,
@@ -202,7 +211,7 @@ class TestMusicAgentPipeline:
                 metadata={},
             )
 
-        agent.run = fake_run  # type: ignore[method-assign]
+        agent._run_local_pipeline = fake_run_local_pipeline  # type: ignore[method-assign]
 
         inputs = [
             PipelineInput(
@@ -236,6 +245,81 @@ class TestMusicAgentPipeline:
         assert captured_guidance[0] is not None
         assert captured_guidance[1] is not None
         assert captured_guidance[1] <= captured_guidance[0] + 1.0
+        assert captured_style_tags[0]
+
+    @pytest.mark.asyncio
+    async def test_run_sequence_uses_planned_style_output_fields(self, tmp_path):
+        agent = MusicAgent(generator_config=GeneratorConfig(mock_mode=True))
+        captured_styles: list[StyleOutput] = []
+
+        planned_styles = [
+            StyleOutput(
+                prompt="calm, ambient",
+                guidance_scale=12.5,
+                omega_scale=7.5,
+                infer_step=55,
+            ),
+            StyleOutput(
+                prompt="moderate, cinematic",
+                guidance_scale=13.0,
+                omega_scale=8.5,
+                infer_step=45,
+            ),
+        ]
+
+        def fake_plan_sequence(_contracts, presets=None):
+            return planned_styles
+
+        async def fake_run_local_pipeline(
+            input_data,
+            *,
+            workspace=None,
+            run_id=None,
+            preset=None,
+            style_output=None,
+        ):
+            captured_styles.append(style_output)
+            return PipelineOutput(
+                audio_path=str(tmp_path / f"{len(captured_styles)}.wav"),
+                duration_seconds=5.0,
+                format="wav",
+                sample_rate=48000,
+                metadata={},
+            )
+
+        agent._style_planner.plan_sequence = fake_plan_sequence  # type: ignore[method-assign]
+        agent._run_local_pipeline = fake_run_local_pipeline  # type: ignore[method-assign]
+
+        inputs = [
+            PipelineInput(
+                description="scene one",
+                duration_seconds=5.0,
+                output_dir=str(tmp_path / "a"),
+                audio_contract=AudioSceneContract(
+                    scene_id="s1",
+                    duration_seconds=5.0,
+                    mood="calm",
+                    arousal=0.1,
+                    intensity=0.2,
+                ),
+            ),
+            PipelineInput(
+                description="scene two",
+                duration_seconds=5.0,
+                output_dir=str(tmp_path / "b"),
+                audio_contract=AudioSceneContract(
+                    scene_id="s2",
+                    duration_seconds=5.0,
+                    mood="intense",
+                    arousal=0.9,
+                    intensity=0.9,
+                ),
+            ),
+        ]
+
+        await agent.run_sequence(inputs)
+
+        assert captured_styles == planned_styles
 
 
 class TestDirectorBridge:
