@@ -28,9 +28,10 @@ class ModelConfig(BaseModel):
 
     @property
     def resolved_checkpoint_dir(self) -> str:
-        if self.checkpoint_dir:
-            return self.checkpoint_dir
-        return str(Path.home() / ".cache" / "ace-step" / "checkpoints")
+        base_dir = self.checkpoint_dir or str(Path.home() / ".cache" / "ace-step" / "checkpoints")
+        if self.model_variant == "2b":
+            return base_dir
+        return str(Path(base_dir) / self.model_variant)
 
 
 class GPUInfo(BaseModel):

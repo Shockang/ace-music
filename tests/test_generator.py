@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from ace_music.errors import DependencyUnavailableError, GPUUnavailableError
+from ace_music.mcp.config import ModelConfig
 from ace_music.mcp.loader import load_generator_config
 from ace_music.schemas.audio import AudioOutput
 from ace_music.schemas.lyrics import LyricsOutput
@@ -59,6 +60,14 @@ class TestGeneratorProperties:
         assert config.model_variant == "xl-sft"
         assert config.checkpoint_dir == "/models/ace-step"
         assert config.cpu_offload is True
+
+    def test_model_config_resolved_checkpoint_dir_suffixes_xl_variants(self):
+        config = ModelConfig(
+            checkpoint_dir="/models/ace-step",
+            model_variant="xl-sft",
+        )
+
+        assert config.resolved_checkpoint_dir == "/models/ace-step/xl-sft"
 
 
 class TestMockGeneration:

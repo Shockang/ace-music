@@ -13,14 +13,14 @@ from ace_music.providers.deepseek import DeepSeekProvider
 from ace_music.providers.router import FeatureRouter
 from ace_music.schemas.audio import AudioOutput, ProcessedAudio
 from ace_music.schemas.audio_contract import AudioSceneContract
+from ace_music.schemas.lyrics import LyricsOutput
 from ace_music.schemas.output_config import OutputConfig
 from ace_music.schemas.pipeline import PipelineInput, PipelineOutput
+from ace_music.schemas.style import StyleOutput
 from ace_music.tools.audio_validator import ValidationResult
 from ace_music.tools.generator import GeneratorConfig
 from ace_music.tools.output import OutputResult
 from ace_music.tools.preset_resolver import PresetResolver
-from ace_music.schemas.lyrics import LyricsOutput
-from ace_music.schemas.style import StyleOutput
 
 
 @pytest.fixture
@@ -336,7 +336,9 @@ class TestAgentWithFeatureRouter:
 
 class TestAgentModelVariantSelection:
     @pytest.mark.asyncio
-    async def test_agent_resolves_generator_per_pipeline_input_model_variant(self, tmp_path, monkeypatch):
+    async def test_agent_resolves_generator_per_pipeline_input_model_variant(
+        self, tmp_path, monkeypatch
+    ):
         generator_variants: list[str] = []
 
         class FakeGenerator:
@@ -419,6 +421,19 @@ class TestAgentModelVariantSelection:
         )
 
         assert generator_variants == ["2b", "xl-sft"]
+
+    def test_agent_cache_keys_on_full_effective_generator_config(self):
+        agent = MusicAgent(
+            generator_config=GeneratorConfig(model_variant="2b", dtype="bfloat16")
+        )
+
+        first = agent._resolve_generator("2b")
+        agent._generator_config = agent._generator_config.model_copy(
+            update={"dtype": "float32"}
+        )
+        second = agent._resolve_generator("2b")
+
+        assert first is not second
 
 
 class TestDirectorBridgeEnhanced:

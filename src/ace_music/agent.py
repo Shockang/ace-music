@@ -16,7 +16,7 @@ import logging
 import random
 import time
 from collections.abc import Awaitable, Callable
-from typing import TypeVar
+from typing import Literal, TypeVar
 
 from ace_music.errors import (
     GenerationFailedError,
@@ -63,7 +63,7 @@ class MusicAgent:
         self._lyrics_planner = LyricsPlanner()
         self._style_planner = StylePlanner()
         self._generator_config = generator_config or GeneratorConfig()
-        self._generator_cache: dict[str, ACEStepGenerator] = {}
+        self._generator_cache: dict[tuple[tuple[str, object], ...], ACEStepGenerator] = {}
         self._minimax_generator: MiniMaxMusicGenerator | None = None
         self._post_processor = PostProcessor()
         self._output_worker = OutputWorker()
@@ -72,12 +72,23 @@ class MusicAgent:
         # TODO: Wire FeatureRouter into lyrics_planner/style_planner for LLM-assisted planning
         self._feature_router = feature_router
 
-    def _resolve_generator(self, model_variant: str) -> ACEStepGenerator:
+    def _resolve_generator_key(
+        self,
+        model_variant: Literal["2b", "xl-base", "xl-sft", "xl-turbo"],
+    ) -> tuple[tuple[str, object], ...]:
+        config = self._generator_config.model_copy(update={"model_variant": model_variant})
+        return tuple(sorted(config.model_dump(mode="python").items()))
+
+    def _resolve_generator(
+        self,
+        model_variant: Literal["2b", "xl-base", "xl-sft", "xl-turbo"],
+    ) -> ACEStepGenerator:
         """Resolve an ACE-Step generator instance for the requested model variant."""
-        if model_variant not in self._generator_cache:
+        cache_key = self._resolve_generator_key(model_variant)
+        if cache_key not in self._generator_cache:
             config = self._generator_config.model_copy(update={"model_variant": model_variant})
-            self._generator_cache[model_variant] = ACEStepGenerator(config)
-        return self._generator_cache[model_variant]
+            self._generator_cache[cache_key] = ACEStepGenerator(config)
+        return self._generator_cache[cache_key]
 
     def _build_plan(self, input_data: PipelineInput) -> list[str]:
         """Build execution plan from input. Returns list of tool names to execute."""
