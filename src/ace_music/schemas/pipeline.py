@@ -12,15 +12,9 @@ from ace_music.schemas.output_config import OutputConfig
 class PipelineInput(BaseModel):
     """Top-level input to the MusicAgent pipeline."""
 
-    description: str = Field(
-        description="Natural language description of the desired music"
-    )
-    lyrics: str | None = Field(
-        default=None, description="Pre-written lyrics (raw text)"
-    )
-    style_tags: list[str] = Field(
-        default_factory=list, description="Pre-known style tags"
-    )
+    description: str = Field(description="Natural language description of the desired music")
+    lyrics: str | None = Field(default=None, description="Pre-written lyrics (raw text)")
+    style_tags: list[str] = Field(default_factory=list, description="Pre-known style tags")
     duration_seconds: float = Field(
         default=60.0, ge=5.0, le=240.0, description="Target audio duration"
     )
@@ -62,8 +56,7 @@ class PipelineInput(BaseModel):
         default=120.0,
         gt=0,
         description=(
-            "Default timeout per non-generation pipeline stage; "
-            "None disables stage timeout"
+            "Default timeout per non-generation pipeline stage; None disables stage timeout"
         ),
     )
     generation_timeout_seconds: float | None = Field(
@@ -117,6 +110,4 @@ class PipelineOutput(BaseModel):
         default_factory=dict,
         description="Generation metadata (seed, params, style, lyrics)",
     )
-    segments: list[dict] = Field(
-        default_factory=list, description="Lyrics segment info"
-    )
+    segments: list[dict] = Field(default_factory=list, description="Lyrics segment info")

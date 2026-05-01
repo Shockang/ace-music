@@ -63,7 +63,7 @@ class TestMiniMaxMusicInput:
 class TestMiniMaxMusicConfig:
     def test_defaults(self):
         config = MiniMaxMusicConfig(api_key="test-key")
-        assert config.base_url == "https://api.minimaxi.com/v1/music_generation"
+        assert config.base_url == "https://api.minimax.io/v1/music_generation"
         assert config.timeout == 120.0
         assert config.rate_limit_per_minute == 5
         assert config.sample_rate == 44100
@@ -149,6 +149,26 @@ class TestMiniMaxMusicGenerator:
         assert payload["audio_setting"]["format"] == "mp3"
         assert payload["output_format"] == "url"
 
+    def test_extract_audio_url_accepts_documented_audio_field(self):
+        config = MiniMaxMusicConfig(api_key="test-key")
+        gen = MiniMaxMusicGenerator(config)
+        result = {
+            "data": {"audio": "https://cdn.example.com/audio.mp3"},
+            "base_resp": {"status_code": 0},
+        }
+
+        assert gen._extract_audio_url(result) == "https://cdn.example.com/audio.mp3"
+
+    def test_extract_audio_bytes_accepts_hex_audio_field(self):
+        config = MiniMaxMusicConfig(api_key="test-key")
+        gen = MiniMaxMusicGenerator(config)
+        result = {
+            "data": {"audio": "000102ff"},
+            "base_resp": {"status_code": 0},
+        }
+
+        assert gen._extract_audio_bytes(result) == bytes([0, 1, 2, 255])
+
     def test_build_payload_lyrics_with_optimizer(self):
         config = MiniMaxMusicConfig(api_key="test-key")
         gen = MiniMaxMusicGenerator(config)
@@ -161,9 +181,7 @@ class TestMiniMaxMusicGenerator:
     def test_build_payload_lyrics_with_text(self):
         config = MiniMaxMusicConfig(api_key="test-key")
         gen = MiniMaxMusicGenerator(config)
-        inp = MiniMaxMusicInput(
-            description="pop song", mode="lyrics", lyrics="[verse]\nHello"
-        )
+        inp = MiniMaxMusicInput(description="pop song", mode="lyrics", lyrics="[verse]\nHello")
         payload = gen._build_payload(inp)
         assert payload["lyrics"] == "[verse]\nHello"
         assert "lyrics_optimizer" not in payload
@@ -171,9 +189,7 @@ class TestMiniMaxMusicGenerator:
     def test_build_payload_cover(self):
         config = MiniMaxMusicConfig(api_key="test-key")
         gen = MiniMaxMusicGenerator(config)
-        inp = MiniMaxMusicInput(
-            description="rock version", mode="cover", ref_audio="/tmp/song.mp3"
-        )
+        inp = MiniMaxMusicInput(description="rock version", mode="cover", ref_audio="/tmp/song.mp3")
         payload = gen._build_payload(inp)
         assert payload["model"] == "music-cover"
         assert payload["ref_audio"] == "/tmp/song.mp3"
@@ -184,7 +200,10 @@ class TestMiniMaxMusicGenerator:
         gen = MiniMaxMusicGenerator(config)
 
         mock_response = {
-            "data": {"audio_url": "https://cdn.example.com/audio.mp3"},
+            "data": {
+                "audio": "https://cdn.example.com/audio.mp3",
+                "extra_info": {"audio_length": 10, "audio_sample_rate": 44100},
+            },
             "base_resp": {"status_code": 0},
         }
 
@@ -196,14 +215,13 @@ class TestMiniMaxMusicGenerator:
             Path(audio_path).write_bytes(b"fake mp3 data")
             mock_dl.return_value = audio_path
 
-            inp = MiniMaxMusicInput(
-                description="light jazz", output_dir=str(tmp_path)
-            )
+            inp = MiniMaxMusicInput(description="light jazz", output_dir=str(tmp_path))
             result = await gen.execute(inp)
 
         assert isinstance(result, AudioOutput)
         assert result.format == "mp3"
         assert result.sample_rate == 44100
+        assert result.duration_seconds == 10.0
 
     @pytest.mark.asyncio
     async def test_execute_api_error_raises(self, tmp_path):
@@ -221,11 +239,9 @@ class TestMiniMaxMusicGenerator:
         config = MiniMaxMusicConfig(api_key="test-key")
         gen = MiniMaxMusicGenerator(config)
 
-        with patch.object(
-            gen, "_call_api", new_callable=AsyncMock, return_value={"bad": "data"}
-        ):
+        with patch.object(gen, "_call_api", new_callable=AsyncMock, return_value={"bad": "data"}):
             inp = MiniMaxMusicInput(description="test", output_dir=str(tmp_path))
-            with pytest.raises(GenerationFailedError, match="audio_url"):
+            with pytest.raises(GenerationFailedError, match="audio URL"):
                 await gen.execute(inp)
 
     @pytest.mark.asyncio
@@ -258,9 +274,7 @@ class TestMiniMaxMusicGenerator:
             "data": {},
             "base_resp": {"status_code": 1004, "status_msg": "quota exhausted"},
         }
-        with patch.object(
-            gen, "_call_api", new_callable=AsyncMock, return_value=bad_business
-        ):
+        with patch.object(gen, "_call_api", new_callable=AsyncMock, return_value=bad_business):
             inp = MiniMaxMusicInput(description="test", output_dir=str(tmp_path))
             with pytest.raises(GenerationFailedError, match="quota exhausted"):
                 await gen.execute(inp)

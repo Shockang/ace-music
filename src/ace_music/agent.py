@@ -16,7 +16,7 @@ import logging
 import random
 import time
 from collections.abc import Awaitable, Callable
-from typing import Literal, TypeVar
+from typing import Literal, TypedDict, TypeVar
 
 from ace_music.errors import (
     GenerationFailedError,
@@ -26,10 +26,14 @@ from ace_music.errors import (
 from ace_music.providers.router import FeatureRouter
 from ace_music.resume import stages_to_run
 from ace_music.schemas.audio import AudioOutput, ProcessedAudio
+from ace_music.schemas.audio_contract import AudioSceneContract
+from ace_music.schemas.material import MaterialContext
 from ace_music.schemas.pipeline import PipelineInput, PipelineOutput
+from ace_music.schemas.preset import StylePreset
 from ace_music.schemas.repair import ArtifactStatus
+from ace_music.schemas.style import StyleOutput
 from ace_music.tools.audio_validator import AudioValidator
-from ace_music.tools.emotion_mapper import map_scene_contract
+from ace_music.tools.emotion_mapper import MappedAudioParameters, map_scene_contract
 from ace_music.tools.generator import ACEStepGenerator, GenerationInput, GeneratorConfig
 from ace_music.tools.lyrics_planner import LyricsPlanner
 from ace_music.tools.minimax_generator import MiniMaxMusicGenerator
@@ -42,6 +46,21 @@ from ace_music.workspace import WorkspaceManager
 
 logger = logging.getLogger(__name__)
 StageResult = TypeVar("StageResult")
+
+
+class StyleContext(TypedDict):
+    contract: AudioSceneContract | None
+    mapped_audio: MappedAudioParameters | None
+    material: MaterialContext | None
+    material_description: str
+    material_mood: str | None
+    material_lyrics: str | None
+    material_style_tags: list[str]
+    effective_description: str
+    effective_style_tags: list[str]
+    effective_tempo: str | None
+    effective_mood: str | None
+    effective_guidance: float | None
 
 
 class MusicAgent:
@@ -183,9 +202,7 @@ class MusicAgent:
             try:
                 self._minimax_generator = MiniMaxMusicGenerator()
             except ValueError as exc:
-                raise GenerationFailedError(
-                    f"MiniMax configuration error: {exc}"
-                ) from exc
+                raise GenerationFailedError(f"MiniMax configuration error: {exc}") from exc
 
         if workspace and run_id and not workspace.manifest_exists(run_id):
             workspace.create_run(run_id, description=input_data.description, seed=seed)
@@ -255,6 +272,17 @@ class MusicAgent:
 
         result.metadata["backend"] = "minimax"
         result.metadata["elapsed_seconds"] = round(time.monotonic() - pipeline_started_at, 2)
+        result.metadata["validation"] = self._audio_validator.validate(
+            result.audio_path,
+            expected_sample_rate=input_data.expected_sample_rate,
+            min_duration_seconds=input_data.min_valid_duration_seconds,
+            expected_duration_seconds=input_data.duration_seconds,
+            duration_tolerance_seconds=input_data.duration_tolerance_seconds,
+            actual_format=result.format,
+            actual_sample_rate=result.sample_rate,
+            actual_duration_seconds=result.duration_seconds,
+            actual_channels=audio_output.channels,
+        ).model_dump()
 
         return PipelineOutput(
             audio_path=result.audio_path,
@@ -288,9 +316,7 @@ class MusicAgent:
             try:
                 self._stable_audio_generator = StableAudioGenerator()
             except ValueError as exc:
-                raise GenerationFailedError(
-                    f"Stable Audio configuration error: {exc}"
-                ) from exc
+                raise GenerationFailedError(f"Stable Audio configuration error: {exc}") from exc
 
         if workspace and run_id and not workspace.manifest_exists(run_id):
             workspace.create_run(run_id, description=input_data.description, seed=seed)
@@ -358,12 +384,14 @@ class MusicAgent:
             metadata=result.metadata,
         )
 
-    def _resolve_style_context(self, input_data: PipelineInput) -> dict[str, object]:
+    def _resolve_style_context(self, input_data: PipelineInput) -> StyleContext:
         contract = input_data.audio_contract
         mapped_audio = (
             None
             if input_data.passthrough_audio_contract
-            else map_scene_contract(contract) if contract else None
+            else map_scene_contract(contract)
+            if contract
+            else None
         )
 
         material = input_data.material_context
@@ -398,9 +426,7 @@ class MusicAgent:
             effective_tempo = effective_tempo or mapped_audio.tempo_preference
             effective_guidance = effective_guidance or mapped_audio.guidance_scale
             if mapped_audio.prompt_suffix:
-                effective_description = (
-                    f"{effective_description}. {mapped_audio.prompt_suffix}"
-                )
+                effective_description = f"{effective_description}. {mapped_audio.prompt_suffix}"
 
         return {
             "contract": contract,
@@ -423,14 +449,12 @@ class MusicAgent:
         workspace: WorkspaceManager | None = None,
         run_id: str | None = None,
         *,
-        preset=None,
-        style_output=None,
+        preset: StylePreset | None = None,
+        style_output: StyleOutput | None = None,
     ) -> PipelineOutput:
         pipeline_started_at = time.monotonic()
         stage_timeout = input_data.stage_timeout_seconds
-        seed = input_data.seed if input_data.seed is not None else random.randint(
-            0, 2**32 - 1
-        )
+        seed = input_data.seed if input_data.seed is not None else random.randint(0, 2**32 - 1)
         style_context = self._resolve_style_context(input_data)
         contract = style_context["contract"]
         mapped_audio = style_context["mapped_audio"]
@@ -778,10 +802,10 @@ class MusicAgent:
         stage_timeout = input_data.stage_timeout_seconds
 
         # Load intermediate outputs from completed stages
-        lyrics_output = None
-        style_output = None
-        audio_output = None
-        processed = None
+        lyrics_output: LyricsOutput | None = None
+        style_output: StyleOutput | None = None
+        audio_output: AudioOutput | None = None
+        processed: ProcessedAudio | None = None
 
         completed = set(manifest.completed_stages)
 
@@ -834,7 +858,9 @@ class MusicAgent:
                 workspace.update_artifact(run_id, "lyrics_planner", ArtifactStatus.COMPLETED)
             except Exception as e:
                 workspace.update_artifact(
-                    run_id, "lyrics_planner", ArtifactStatus.FAILED,
+                    run_id,
+                    "lyrics_planner",
+                    ArtifactStatus.FAILED,
                     error_message=str(e),
                 )
                 raise
@@ -859,7 +885,9 @@ class MusicAgent:
                 workspace.update_artifact(run_id, "style_planner", ArtifactStatus.COMPLETED)
             except Exception as e:
                 workspace.update_artifact(
-                    run_id, "style_planner", ArtifactStatus.FAILED,
+                    run_id,
+                    "style_planner",
+                    ArtifactStatus.FAILED,
                     error_message=str(e),
                 )
                 raise
@@ -868,15 +896,13 @@ class MusicAgent:
         if "generator" in remaining:
             try:
                 gen_input = GenerationInput(
-                    lyrics=lyrics_output or LyricsOutput(
-                        formatted_lyrics="", is_instrumental=True
-                    ),
+                    lyrics=lyrics_output or LyricsOutput(formatted_lyrics="", is_instrumental=True),
                     style=style_output or StyleOutput(prompt=input_data.description),
                     audio_duration=input_data.duration_seconds,
                     seed=seed,
                     output_dir=workspace.stage_dir(run_id, "generator"),
                 )
-                audio_output = await self._run_stage(
+                generated_audio = await self._run_stage(
                     "generator",
                     lambda: self._resolve_generator(input_data.model_variant).execute_sync(
                         gen_input
@@ -885,13 +911,18 @@ class MusicAgent:
                     workspace,
                     run_id,
                 )
+                audio_output = generated_audio
                 workspace.update_artifact(
-                    run_id, "generator", ArtifactStatus.COMPLETED,
-                    file_path=audio_output.file_path,
+                    run_id,
+                    "generator",
+                    ArtifactStatus.COMPLETED,
+                    file_path=generated_audio.file_path,
                 )
             except Exception as e:
                 workspace.update_artifact(
-                    run_id, "generator", ArtifactStatus.FAILED,
+                    run_id,
+                    "generator",
+                    ArtifactStatus.FAILED,
                     error_message=str(e),
                 )
                 raise
@@ -907,7 +938,9 @@ class MusicAgent:
                 workspace.update_artifact(run_id, "post_processor", ArtifactStatus.COMPLETED)
             except Exception as e:
                 workspace.update_artifact(
-                    run_id, "post_processor", ArtifactStatus.FAILED,
+                    run_id,
+                    "post_processor",
+                    ArtifactStatus.FAILED,
                     error_message=str(e),
                 )
                 raise
@@ -936,7 +969,9 @@ class MusicAgent:
                 )
             except Exception as e:
                 workspace.update_artifact(
-                    run_id, "output", ArtifactStatus.FAILED,
+                    run_id,
+                    "output",
+                    ArtifactStatus.FAILED,
                     error_message=str(e),
                 )
                 raise

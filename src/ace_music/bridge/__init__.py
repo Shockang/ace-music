@@ -21,9 +21,7 @@ class DirectorBridge(BaseModel):
         scene_id: str = Field(description="Unique scene identifier from the calling system")
         mood: str = Field(description="Emotional mood tag (e.g. 'melancholic', 'upbeat')")
         duration_seconds: float = Field(ge=5.0, le=240.0, description="Target duration")
-        style_reference: str | None = Field(
-            default=None, description="Style reference description"
-        )
+        style_reference: str | None = Field(default=None, description="Style reference description")
         lyrics_hint: str | None = Field(default=None, description="Optional lyrics hint")
         tempo_preference: str | None = Field(default=None, description="Tempo preference")
         output_format: str = Field(default="wav")
@@ -32,7 +30,9 @@ class DirectorBridge(BaseModel):
             default=None, description="Full scene description for context-aware music generation"
         )
         intensity: float | None = Field(
-            default=None, ge=0.0, le=1.0,
+            default=None,
+            ge=0.0,
+            le=1.0,
             description="Emotional intensity (0.0=subtle, 1.0=extreme)",
         )
         valence: float | None = Field(
@@ -85,6 +85,4 @@ class DirectorBridge(BaseModel):
         )
         scene_id: str = Field(description="Echo of the requesting scene ID")
         success: bool = Field(default=True, description="Whether generation succeeded")
-        error: str | None = Field(
-            default=None, description="Error message if generation failed"
-        )
+        error: str | None = Field(default=None, description="Error message if generation failed")

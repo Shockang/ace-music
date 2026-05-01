@@ -294,9 +294,7 @@ class TestDuckingHelpers:
         ramp_up = np.sqrt(
             np.mean(processed[int(0.415 * sample_rate) : int(0.425 * sample_rate)] ** 2)
         )
-        after = np.sqrt(
-            np.mean(processed[int(0.46 * sample_rate) : int(0.47 * sample_rate)] ** 2)
-        )
+        after = np.sqrt(np.mean(processed[int(0.46 * sample_rate) : int(0.47 * sample_rate)] ** 2))
         full_recovered = np.sqrt(
             np.mean(processed[int(0.451 * sample_rate) : int(0.459 * sample_rate)] ** 2)
         )
@@ -359,9 +357,7 @@ class TestDuckingHelpers:
         first_end = np.sqrt(
             np.mean(processed[int(1.15 * sample_rate) : int(1.19 * sample_rate)] ** 2)
         )
-        join = np.sqrt(
-            np.mean(processed[int(1.195 * sample_rate) : int(1.205 * sample_rate)] ** 2)
-        )
+        join = np.sqrt(np.mean(processed[int(1.195 * sample_rate) : int(1.205 * sample_rate)] ** 2))
         second_start = np.sqrt(
             np.mean(processed[int(1.21 * sample_rate) : int(1.24 * sample_rate)] ** 2)
         )
@@ -418,9 +414,7 @@ class TestLoudnessMetadata:
 
         assert ducked_rms < baseline_rms
 
-    def test_process_with_soundfile_remeasures_loudness_after_ducking(
-        self, tmp_path, monkeypatch
-    ):
+    def test_process_with_soundfile_remeasures_loudness_after_ducking(self, tmp_path, monkeypatch):
         np = pytest.importorskip("numpy")
 
         sample_rate = 48000

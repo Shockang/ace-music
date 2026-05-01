@@ -153,6 +153,5 @@ class TestFailureGuards:
         assert result.metadata.get("material") is None
         # And a warning should have been logged
         assert any(
-            "0 entries" in r.message and "material" in r.message.lower()
-            for r in caplog.records
+            "0 entries" in r.message and "material" in r.message.lower() for r in caplog.records
         ), f"Expected warning about empty material, got: {[r.message for r in caplog.records]}"

@@ -1,4 +1,5 @@
 """Tests for audio validation."""
+
 import struct
 import wave
 
@@ -79,6 +80,25 @@ class TestAudioValidator:
         filepath.write_text("this is not a wav file")
         result = validator.validate(str(filepath))
         assert result.is_valid is False
+
+    def test_non_wav_uses_metadata_when_format_hint_present(self, validator, tmp_path):
+        filepath = tmp_path / "generated.mp3"
+        filepath.write_bytes(b"x" * 2048)
+        result = validator.validate(
+            str(filepath),
+            expected_sample_rate=44100,
+            expected_duration_seconds=10.0,
+            duration_tolerance_seconds=0.5,
+            actual_format="mp3",
+            actual_sample_rate=44100,
+            actual_duration_seconds=10.0,
+            actual_channels=2,
+        )
+
+        assert result.is_valid is True
+        assert result.format == "mp3"
+        assert result.sample_rate == 44100
+        assert result.duration_seconds == 10.0
 
     def test_validation_result_dict(self, validator, valid_wav):
         result = validator.validate(valid_wav)

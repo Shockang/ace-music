@@ -1070,14 +1070,10 @@ class TestAgentModelVariantSelection:
         assert generator_variants == ["2b", "xl-sft"]
 
     def test_agent_cache_keys_on_full_effective_generator_config(self):
-        agent = MusicAgent(
-            generator_config=GeneratorConfig(model_variant="2b", dtype="bfloat16")
-        )
+        agent = MusicAgent(generator_config=GeneratorConfig(model_variant="2b", dtype="bfloat16"))
 
         first = agent._resolve_generator("2b")
-        agent._generator_config = agent._generator_config.model_copy(
-            update={"dtype": "float32"}
-        )
+        agent._generator_config = agent._generator_config.model_copy(update={"dtype": "float32"})
         second = agent._resolve_generator("2b")
 
         assert first is not second

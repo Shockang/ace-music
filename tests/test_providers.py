@@ -19,9 +19,7 @@ class FakeProvider:
         return "fake"
 
     async def complete(self, messages: list[ChatMessage], **kwargs) -> ChatResponse:
-        return ChatResponse(
-            content="fake response", model="fake-1.0", usage={"total_tokens": 10}
-        )
+        return ChatResponse(content="fake response", model="fake-1.0", usage={"total_tokens": 10})
 
 
 class TestChatProviderProtocol:
@@ -29,9 +27,7 @@ class TestChatProviderProtocol:
     async def test_fake_provider_satisfies_protocol(self):
         provider = FakeProvider()
         assert provider.name == "fake"
-        response = await provider.complete(
-            [ChatMessage(role="user", content="hello")]
-        )
+        response = await provider.complete([ChatMessage(role="user", content="hello")])
         assert response.content == "fake response"
 
     def test_chat_message_model(self):
@@ -61,9 +57,7 @@ class TestDeepSeekProvider:
 
         with patch.object(provider, "_call_api", new_callable=AsyncMock) as mock_api:
             mock_api.return_value = mock_response
-            response = await provider.complete(
-                [ChatMessage(role="user", content="Write lyrics")]
-            )
+            response = await provider.complete([ChatMessage(role="user", content="Write lyrics")])
             assert response.content == "Generated lyrics"
             assert response.model == "deepseek-chat"
 

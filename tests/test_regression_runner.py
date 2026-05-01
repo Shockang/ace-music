@@ -68,9 +68,7 @@ class TestRegressionRunner:
         assert len(set(seeds)) == 3
 
     @pytest.mark.asyncio
-    async def test_regression_results_have_material_provenance(
-        self, runner, sample_material
-    ):
+    async def test_regression_results_have_material_provenance(self, runner, sample_material):
         results = await runner.run_regression(
             description="provenance test",
             material=sample_material,

@@ -24,7 +24,7 @@ from ace_music.tools.base import MusicTool
 
 logger = logging.getLogger(__name__)
 
-MINIMAX_MUSIC_URL = "https://api.minimaxi.com/v1/music_generation"
+MINIMAX_MUSIC_URL = "https://api.minimax.io/v1/music_generation"
 
 
 class MiniMaxMusicInput(BaseModel):
@@ -36,9 +36,7 @@ class MiniMaxMusicInput(BaseModel):
         description="Generation mode: instrumental, lyrics, or cover",
     )
     lyrics: str | None = Field(default=None, max_length=3500)
-    ref_audio: str | None = Field(
-        default=None, description="Reference audio for cover mode"
-    )
+    ref_audio: str | None = Field(default=None, description="Reference audio for cover mode")
     output_dir: str = Field(default="./output")
 
 
@@ -51,6 +49,7 @@ class MiniMaxMusicConfig(BaseModel):
     rate_limit_per_minute: int = 5
     sample_rate: int = 44100
     audio_format: str = "mp3"
+    output_format: Literal["url", "hex"] = "url"
 
     def model_post_init(self, __context: Any) -> None:
         if self.api_key is None:
@@ -79,9 +78,7 @@ class RateLimiter:
         while True:
             async with self._lock:
                 now = time.monotonic()
-                self._timestamps = [
-                    t for t in self._timestamps if now - t < self._period
-                ]
+                self._timestamps = [t for t in self._timestamps if now - t < self._period]
                 if len(self._timestamps) < self._max_calls:
                     self._timestamps.append(now)
                     return
@@ -136,7 +133,7 @@ class MiniMaxMusicGenerator(MusicTool[MiniMaxMusicInput, AudioOutput]):
                 "sample_rate": self._config.sample_rate,
                 "format": self._config.audio_format,
             },
-            "output_format": "url",
+            "output_format": self._config.output_format,
         }
 
         if input_data.mode == "instrumental":
@@ -166,11 +163,21 @@ class MiniMaxMusicGenerator(MusicTool[MiniMaxMusicInput, AudioOutput]):
             "Content-Type": "application/json",
         }
         async with httpx.AsyncClient(timeout=self._config.timeout) as client:
-            response = await client.post(
-                self._config.base_url, json=payload, headers=headers
-            )
+            response = await client.post(self._config.base_url, json=payload, headers=headers)
             response.raise_for_status()
             return response.json()
+
+    def _validate_response(self, result: dict[str, Any]) -> dict[str, Any]:
+        """Return response data or raise a business-error diagnostic."""
+        base_resp = result.get("base_resp") or {}
+        status_code = base_resp.get("status_code", 0)
+        if status_code != 0:
+            status_msg = base_resp.get("status_msg", "unknown error")
+            raise GenerationFailedError(f"MiniMax API error {status_code}: {status_msg}")
+        data = result.get("data") or {}
+        if not isinstance(data, dict):
+            raise GenerationFailedError("MiniMax response data field is not an object")
+        return data
 
     def _extract_audio_url(self, result: dict[str, Any]) -> str:
         """Extract audio download URL from API response.
@@ -180,31 +187,40 @@ class MiniMaxMusicGenerator(MusicTool[MiniMaxMusicInput, AudioOutput]):
         Surface those before the generic 'missing audio_url' diagnostic so
         operators see the actual cause.
         """
-        base_resp = result.get("base_resp") or {}
-        status_code = base_resp.get("status_code", 0)
-        if status_code != 0:
-            status_msg = base_resp.get("status_msg", "unknown error")
-            raise GenerationFailedError(
-                f"MiniMax API error {status_code}: {status_msg}"
-            )
+        data = self._validate_response(result)
+        audio = data.get("audio_url") or data.get("audio")
+        if isinstance(audio, str) and audio.startswith(("http://", "https://")):
+            return audio
 
-        data = result.get("data") or {}
-        url = data.get("audio_url")
-        if not url:
+        if not audio:
             redacted_keys = sorted(result.keys())
             raise GenerationFailedError(
-                f"MiniMax response missing audio_url; top-level keys: {redacted_keys}"
+                f"MiniMax response missing audio URL; top-level keys: {redacted_keys}"
             )
-        return url
+        raise GenerationFailedError("MiniMax response audio field is not a URL")
+
+    def _extract_audio_bytes(self, result: dict[str, Any]) -> bytes:
+        """Extract hex-encoded audio bytes from a MiniMax response."""
+        data = self._validate_response(result)
+        audio = data.get("audio")
+        if not isinstance(audio, str) or audio.startswith(("http://", "https://")):
+            raise GenerationFailedError("MiniMax response missing hex audio payload")
+        try:
+            return bytes.fromhex(audio)
+        except ValueError as exc:
+            raise GenerationFailedError("MiniMax response audio field is not valid hex") from exc
+
+    def _extract_extra_info(self, result: dict[str, Any]) -> dict[str, Any]:
+        """Extract optional generation metadata from MiniMax response data."""
+        data = self._validate_response(result)
+        extra_info = data.get("extra_info") or {}
+        return extra_info if isinstance(extra_info, dict) else {}
 
     async def _download_audio(self, url: str, output_dir: str) -> str:
         """Download generated audio from URL to output directory."""
         out_path = Path(output_dir)
         out_path.mkdir(parents=True, exist_ok=True)
-        filename = (
-            f"minimax_{int(time.time())}_{uuid.uuid4().hex[:8]}"
-            f".{self._config.audio_format}"
-        )
+        filename = f"minimax_{int(time.time())}_{uuid.uuid4().hex[:8]}.{self._config.audio_format}"
         filepath = out_path / filename
 
         async with httpx.AsyncClient(timeout=self._config.timeout) as client:
@@ -214,6 +230,15 @@ class MiniMaxMusicGenerator(MusicTool[MiniMaxMusicInput, AudioOutput]):
 
         return str(filepath)
 
+    def _write_audio_bytes(self, audio: bytes, output_dir: str) -> str:
+        """Write generated audio bytes from a hex response to output directory."""
+        out_path = Path(output_dir)
+        out_path.mkdir(parents=True, exist_ok=True)
+        filename = f"minimax_{int(time.time())}_{uuid.uuid4().hex[:8]}.{self._config.audio_format}"
+        filepath = out_path / filename
+        filepath.write_bytes(audio)
+        return str(filepath)
+
     async def execute(self, input_data: MiniMaxMusicInput) -> AudioOutput:
         """Generate music via MiniMax Music API."""
         if (
@@ -221,16 +246,12 @@ class MiniMaxMusicGenerator(MusicTool[MiniMaxMusicInput, AudioOutput]):
             and input_data.ref_audio
             and not Path(input_data.ref_audio).is_file()
         ):
-            raise GenerationFailedError(
-                f"ref_audio not found: {input_data.ref_audio}"
-            )
+            raise GenerationFailedError(f"ref_audio not found: {input_data.ref_audio}")
 
         await self._rate_limiter.acquire()
 
         payload = self._build_payload(input_data)
-        logger.info(
-            "MiniMax request: model=%s, mode=%s", payload["model"], input_data.mode
-        )
+        logger.info("MiniMax request: model=%s, mode=%s", payload["model"], input_data.mode)
 
         try:
             result = await self._call_api(payload)
@@ -239,28 +260,31 @@ class MiniMaxMusicGenerator(MusicTool[MiniMaxMusicInput, AudioOutput]):
                 f"MiniMax API returned {e.response.status_code}: {e.response.text[:200]}"
             ) from e
         except httpx.HTTPError as e:
-            raise GenerationFailedError(
-                f"MiniMax Music API request failed: {e}"
-            ) from e
+            raise GenerationFailedError(f"MiniMax Music API request failed: {e}") from e
         except GenerationFailedError:
             raise
         except Exception as e:
-            raise GenerationFailedError(
-                f"MiniMax Music API request failed: {e}"
-            ) from e
+            raise GenerationFailedError(f"MiniMax Music API request failed: {e}") from e
 
-        audio_url = self._extract_audio_url(result)
-        try:
-            audio_path = await self._download_audio(audio_url, input_data.output_dir)
-        except httpx.HTTPError as e:
-            raise GenerationFailedError(
-                f"MiniMax audio download failed: {e}"
-            ) from e
+        if self._config.output_format == "hex":
+            audio_path = self._write_audio_bytes(
+                self._extract_audio_bytes(result), input_data.output_dir
+            )
+        else:
+            audio_url = self._extract_audio_url(result)
+            try:
+                audio_path = await self._download_audio(audio_url, input_data.output_dir)
+            except httpx.HTTPError as e:
+                raise GenerationFailedError(f"MiniMax audio download failed: {e}") from e
+
+        extra_info = self._extract_extra_info(result)
+        duration = float(extra_info.get("audio_length") or 0.0)
+        sample_rate = int(extra_info.get("audio_sample_rate") or self._config.sample_rate)
 
         return AudioOutput(
             file_path=audio_path,
-            duration_seconds=0.0,
-            sample_rate=self._config.sample_rate,
+            duration_seconds=duration,
+            sample_rate=sample_rate,
             format=self._config.audio_format,
             channels=2,
         )

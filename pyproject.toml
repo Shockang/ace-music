@@ -61,3 +61,10 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+
+[[tool.mypy.overrides]]
+module = ["acestep.*", "pyloudnorm", "soundfile", "yaml"]
+ignore_missing_imports = true

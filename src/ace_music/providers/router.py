@@ -33,9 +33,7 @@ class FeatureRouter:
             return provider
         return self._default
 
-    async def complete(
-        self, feature: str, messages: list[ChatMessage], **kwargs
-    ) -> ChatResponse:
+    async def complete(self, feature: str, messages: list[ChatMessage], **kwargs) -> ChatResponse:
         """Generate a completion using the provider bound to the feature."""
         provider = self._resolve(feature)
         logger.debug("Routing feature '%s' to provider '%s'", feature, provider.name)

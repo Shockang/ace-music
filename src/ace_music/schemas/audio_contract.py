@@ -99,8 +99,7 @@ class AudioSceneContract(BaseModel):
         for segment in self.segments:
             if segment.end_seconds > self.duration_seconds:
                 raise ValueError(
-                    f"segment '{segment.segment_id}' end_seconds must be <= "
-                    "duration_seconds"
+                    f"segment '{segment.segment_id}' end_seconds must be <= duration_seconds"
                 )
 
             if previous_segment is None:
@@ -120,20 +119,20 @@ class AudioSceneContract(BaseModel):
 
         previous_tts_segment: TTSSegment | None = None
 
-        for segment in self.tts_segments:
-            if segment.end_seconds > self.duration_seconds:
+        for tts_segment in self.tts_segments:
+            if tts_segment.end_seconds > self.duration_seconds:
                 raise ValueError("tts_segments end_seconds must be <= duration_seconds")
 
             if previous_tts_segment is None:
-                previous_tts_segment = segment
+                previous_tts_segment = tts_segment
                 continue
 
-            if segment.start_seconds < previous_tts_segment.start_seconds:
+            if tts_segment.start_seconds < previous_tts_segment.start_seconds:
                 raise ValueError("tts_segments must be ordered by start_seconds")
 
-            if segment.start_seconds < previous_tts_segment.end_seconds:
+            if tts_segment.start_seconds < previous_tts_segment.end_seconds:
                 raise ValueError("tts_segments must not overlap")
 
-            previous_tts_segment = segment
+            previous_tts_segment = tts_segment
 
         return self

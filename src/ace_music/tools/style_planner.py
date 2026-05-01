@@ -127,9 +127,7 @@ class StylePlanner(MusicTool[StyleInput, StyleOutput]):
         # Determine parameters
         if preset:
             overrides = preset.to_style_overrides()
-            guidance_scale = tempo_overrides.get(
-                "guidance_scale", overrides.guidance_scale
-            )
+            guidance_scale = tempo_overrides.get("guidance_scale", overrides.guidance_scale)
             omega_scale = tempo_overrides.get("omega_scale", overrides.omega_scale)
             return StyleOutput(
                 prompt=prompt,
@@ -215,9 +213,7 @@ class StylePlanner(MusicTool[StyleInput, StyleOutput]):
                 filtered_tags = list(prompt_tags)
                 if "moderate" not in filtered_tags and "neutral" not in filtered_tags:
                     target_arousal = contracts[target_idx].arousal or 0.0
-                    filtered_tags.append(
-                        "moderate" if target_arousal > 0.3 else "neutral"
-                    )
+                    filtered_tags.append("moderate" if target_arousal > 0.3 else "neutral")
                 outputs[target_idx] = outputs[target_idx].model_copy(
                     update={"prompt": ", ".join(filtered_tags)}
                 )

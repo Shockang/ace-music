@@ -10,6 +10,7 @@ Encapsulates ACE-Step pipeline invocation with:
 import logging
 import random
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
@@ -22,6 +23,7 @@ from ace_music.schemas.style import StyleOutput
 from ace_music.tools.base import MusicTool
 
 logger = logging.getLogger(__name__)
+PipelineHandle = Literal["mock"] | Callable[..., Any]
 
 
 class GenerationInput(BaseModel):
@@ -51,9 +53,7 @@ class GeneratorConfig(BaseModel):
         default="2b",
         description="ACE-Step model variant to load",
     )
-    mock_mode: bool = Field(
-        default=False, description="Use mock generator (no GPU required)"
-    )
+    mock_mode: bool = Field(default=False, description="Use mock generator (no GPU required)")
     require_cuda: bool = Field(
         default=True,
         description="Require CUDA in production mode before loading ACE-Step",
@@ -73,7 +73,7 @@ class ACEStepGenerator(MusicTool[GenerationInput, AudioOutput]):
 
     def __init__(self, config: GeneratorConfig | None = None) -> None:
         self._config = config or GeneratorConfig()
-        self._pipeline = None
+        self._pipeline: PipelineHandle | None = None
 
     @property
     def name(self) -> str:
@@ -137,9 +137,7 @@ class ACEStepGenerator(MusicTool[GenerationInput, AudioOutput]):
 
         required_vram_gb = 12.0 if self._config.cpu_offload else 20.0
         detected_vram_gb = (
-            available_vram_gb
-            if available_vram_gb is not None
-            else self._detect_available_vram_gb()
+            available_vram_gb if available_vram_gb is not None else self._detect_available_vram_gb()
         )
 
         if detected_vram_gb < required_vram_gb:
@@ -169,7 +167,7 @@ class ACEStepGenerator(MusicTool[GenerationInput, AudioOutput]):
         props = torch.cuda.get_device_properties(self._config.device_id)
         return props.total_memory / (1024**3)
 
-    def _ensure_pipeline(self) -> Any:
+    def _ensure_pipeline(self) -> PipelineHandle:
         """Load the ACE-Step pipeline (singleton pattern)."""
         if self._pipeline is not None:
             return self._pipeline
@@ -244,18 +242,18 @@ class ACEStepGenerator(MusicTool[GenerationInput, AudioOutput]):
 
     def execute_sync(self, input_data: GenerationInput) -> AudioOutput:
         """Blocking generation path suitable for running in a worker thread."""
-        self._ensure_pipeline()
+        pipeline = self._ensure_pipeline()
 
         seed = input_data.seed if input_data.seed is not None else random.randint(0, 2**32 - 1)
 
-        if self._pipeline == "mock":
+        if pipeline == "mock":
             return self._mock_generate(input_data)
 
         # Production: call ACEStepPipeline
         output_dir = Path(input_data.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        result = self._pipeline(
+        result = pipeline(
             audio_duration=input_data.audio_duration,
             prompt=input_data.style.prompt,
             lyrics=input_data.lyrics.to_ace_step_format(),

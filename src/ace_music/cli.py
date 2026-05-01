@@ -86,11 +86,7 @@ def _generator_config_from_args(args: argparse.Namespace) -> GeneratorConfig:
 
 
 def _audio_contract_from_args(args: argparse.Namespace) -> AudioSceneContract | None:
-    if (
-        args.target_lufs is None
-        and args.tts_present is None
-        and args.crossfade is None
-    ):
+    if args.target_lufs is None and args.tts_present is None and args.crossfade is None:
         return None
 
     return AudioSceneContract(
@@ -103,17 +99,13 @@ def _audio_contract_from_args(args: argparse.Namespace) -> AudioSceneContract | 
         transition=TransitionPolicy(
             crossfade_seconds=args.crossfade if args.crossfade is not None else 1.5
         ),
-        mix=MixPolicy(
-            target_lufs=args.target_lufs if args.target_lufs is not None else -14.0
-        ),
+        mix=MixPolicy(target_lufs=args.target_lufs if args.target_lufs is not None else -14.0),
     )
 
 
 def _has_partial_contract_flags(args: argparse.Namespace) -> bool:
     return (
-        args.target_lufs is not None
-        or args.tts_present is not None
-        or args.crossfade is not None
+        args.target_lufs is not None or args.tts_present is not None or args.crossfade is not None
     )
 
 
@@ -191,7 +183,7 @@ def _generate_wall_timeout(args: argparse.Namespace) -> float:
 def _run_generate_with_watchdog(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     ctx = multiprocessing.get_context(_child_context_name())
     result_queue = ctx.Queue(maxsize=1)
-    process = ctx.Process(target=_generate_child, args=(args, result_queue))
+    process = ctx.Process(target=_generate_child, args=(args, result_queue))  # type: ignore[attr-defined]
     timeout_seconds = _generate_wall_timeout(args)
     started_at = time.monotonic()
 
@@ -265,12 +257,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    generate = subparsers.add_parser(
-        "generate", help="Run the music generation pipeline"
-    )
-    generate.add_argument(
-        "--description", required=True, help="Natural language music description"
-    )
+    generate = subparsers.add_parser("generate", help="Run the music generation pipeline")
+    generate.add_argument("--description", required=True, help="Natural language music description")
     generate.add_argument(
         "--backend",
         default="acestep",
@@ -282,8 +270,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="instrumental",
         choices=["instrumental", "lyrics", "cover"],
         help=(
-            "Generation mode for compatible cloud backends; "
-            "stable_audio only supports instrumental"
+            "Generation mode for compatible cloud backends; stable_audio only supports instrumental"
         ),
     )
     generate.add_argument(
@@ -297,9 +284,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Reference audio file for MiniMax cover mode",
     )
     generate.add_argument("--lyrics", help="Optional raw lyrics text")
-    generate.add_argument(
-        "--style-tag", action="append", default=[], help="Style tag; repeatable"
-    )
+    generate.add_argument("--style-tag", action="append", default=[], help="Style tag; repeatable")
     generate.add_argument(
         "--duration", type=float, default=30.0, help="Target duration seconds, 5-240"
     )
@@ -325,9 +310,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip CUDA preflight before production model load",
     )
-    generate.add_argument(
-        "--cpu-offload", action="store_true", help="Request ACE-Step CPU offload"
-    )
+    generate.add_argument("--cpu-offload", action="store_true", help="Request ACE-Step CPU offload")
     generate.add_argument(
         "--stage-timeout", type=float, default=120.0, help="Per-stage timeout seconds"
     )

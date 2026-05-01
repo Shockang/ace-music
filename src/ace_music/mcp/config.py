@@ -45,8 +45,4 @@ class GPUInfo(BaseModel):
     @property
     def supports_bf16(self) -> bool:
         """RTX 3090 Ti and newer support bf16."""
-        return (
-            self.vram_total_gb >= 24.0
-            or "3090" in self.name.lower()
-            or "40" in self.name
-        )
+        return self.vram_total_gb >= 24.0 or "3090" in self.name.lower() or "40" in self.name

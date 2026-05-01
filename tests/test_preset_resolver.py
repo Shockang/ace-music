@@ -1,6 +1,5 @@
 """Tests for PresetResolver tool."""
 
-
 import pytest
 
 from ace_music.schemas.preset import PresetFile, StylePreset
@@ -106,9 +105,7 @@ class TestPresetResolverFuzzyMatch:
 
 class TestPresetMatch:
     def test_preset_match_model(self):
-        preset = StylePreset(
-            id="test", name="Test", description="Test", prompt="test"
-        )
+        preset = StylePreset(id="test", name="Test", description="Test", prompt="test")
         match = PresetMatch(preset=preset, confidence=0.8, match_method="keyword")
         assert match.confidence == 0.8
         assert match.match_method == "keyword"

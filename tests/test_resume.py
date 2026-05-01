@@ -1,6 +1,5 @@
 """Tests for run manifest, repair tickets, and resume functionality."""
 
-
 import pytest
 
 from ace_music.agent import MusicAgent
@@ -76,9 +75,7 @@ class TestRunManifest:
                 "style_planner": ArtifactRecord(
                     stage="style_planner", status=ArtifactStatus.COMPLETED
                 ),
-                "generator": ArtifactRecord(
-                    stage="generator", status=ArtifactStatus.FAILED
-                ),
+                "generator": ArtifactRecord(stage="generator", status=ArtifactStatus.FAILED),
             },
         )
         assert manifest.completed_stages == ["lyrics_planner", "style_planner"]
@@ -94,9 +91,7 @@ class TestRunManifest:
                 "style_planner": ArtifactRecord(
                     stage="style_planner", status=ArtifactStatus.COMPLETED
                 ),
-                "generator": ArtifactRecord(
-                    stage="generator", status=ArtifactStatus.FAILED
-                ),
+                "generator": ArtifactRecord(stage="generator", status=ArtifactStatus.FAILED),
             },
         )
         assert manifest.next_stage == "generator"
@@ -108,8 +103,11 @@ class TestRunManifest:
             artifacts={
                 s: ArtifactRecord(stage=s, status=ArtifactStatus.COMPLETED)
                 for s in [
-                    "lyrics_planner", "style_planner", "generator",
-                    "post_processor", "output",
+                    "lyrics_planner",
+                    "style_planner",
+                    "generator",
+                    "post_processor",
+                    "output",
                 ]
             },
         )

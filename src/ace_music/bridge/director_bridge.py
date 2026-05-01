@@ -10,6 +10,7 @@ from ace_music.schemas.audio_contract import (
     AudioSceneContract,
     MixPolicy,
     TransitionPolicy,
+    TTSSegment,
 )
 from ace_music.schemas.pipeline import PipelineInput, PipelineOutput
 
@@ -27,23 +28,19 @@ def request_to_pipeline_input(req: DirectorBridge.Request) -> PipelineInput:
     if req.scene_description and req.style_reference:
         description_parts.append(req.scene_description)
 
-    mix = MixPolicy(
-        **{
-            key: value
-            for key, value in {
-                "target_lufs": req.target_lufs,
-                "max_true_peak_db": req.max_true_peak_db,
-            }.items()
-            if value is not None
-        }
-    )
-    transition = TransitionPolicy(
-        **(
-            {"crossfade_seconds": req.crossfade_seconds}
-            if req.crossfade_seconds is not None
-            else {}
-        )
-    )
+    mix_updates: dict[str, float] = {}
+    if req.target_lufs is not None:
+        mix_updates["target_lufs"] = req.target_lufs
+    if req.max_true_peak_db is not None:
+        mix_updates["max_true_peak_db"] = req.max_true_peak_db
+    mix = MixPolicy().model_copy(update=mix_updates)
+
+    transition_updates: dict[str, float] = {}
+    if req.crossfade_seconds is not None:
+        transition_updates["crossfade_seconds"] = req.crossfade_seconds
+    transition = TransitionPolicy().model_copy(update=transition_updates)
+
+    tts_segments = [TTSSegment.model_validate(segment) for segment in req.tts_segments or []]
     contract = AudioSceneContract(
         scene_id=req.scene_id,
         duration_seconds=req.duration_seconds,
@@ -57,7 +54,7 @@ def request_to_pipeline_input(req: DirectorBridge.Request) -> PipelineInput:
         layers=AudioLayerPolicy(tts_present=req.tts_present),
         transition=transition,
         mix=mix,
-        tts_segments=req.tts_segments or [],
+        tts_segments=tts_segments,
     )
 
     return PipelineInput(

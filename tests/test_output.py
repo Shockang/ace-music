@@ -44,6 +44,7 @@ class TestVersionConsistency:
     def test_metadata_uses_package_version(self):
         """OutputWorker metadata should use the package version."""
         import ace_music
+
         assert ace_music.__version__
         # Verify it looks like a version string
         parts = ace_music.__version__.split(".")
@@ -91,9 +92,7 @@ class TestOutputWorkerStructuredDir:
         audio_in_output = sample_audio.model_copy(
             update={"file_path": str(out_dir / "test_audio.wav")}
         )
-        Path(audio_in_output.file_path).write_bytes(
-            Path(sample_audio.file_path).read_bytes()
-        )
+        Path(audio_in_output.file_path).write_bytes(Path(sample_audio.file_path).read_bytes())
         result = await worker.execute(
             OutputInput(
                 audio=audio_in_output,

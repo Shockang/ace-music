@@ -122,6 +122,7 @@ class OutputWorker(MusicTool[OutputInput, OutputResult]):
         # Copy audio file
         if src.resolve() != dest.resolve():
             import shutil
+
             shutil.copy2(str(src), str(dest))
         final_path = str(dest)
 

@@ -47,9 +47,7 @@ class TestMaterialContext:
                     content="ambient",
                     category="style_inspiration",
                 ),
-                MaterialEntry(
-                    source_file="b.json", content="neon dreams", category="lyrics"
-                ),
+                MaterialEntry(source_file="b.json", content="neon dreams", category="lyrics"),
             ]
         )
         assert len(ctx.entries) == 2
@@ -58,15 +56,9 @@ class TestMaterialContext:
     def test_entries_by_category(self):
         ctx = MaterialContext(
             entries=[
-                MaterialEntry(
-                    source_file="a.json", content="ambient", category="style"
-                ),
-                MaterialEntry(
-                    source_file="b.json", content="neon", category="lyrics"
-                ),
-                MaterialEntry(
-                    source_file="c.json", content="dark", category="style"
-                ),
+                MaterialEntry(source_file="a.json", content="ambient", category="style"),
+                MaterialEntry(source_file="b.json", content="neon", category="lyrics"),
+                MaterialEntry(source_file="c.json", content="dark", category="style"),
             ]
         )
         assert len(ctx.entries_by_category("style")) == 2
@@ -74,12 +66,8 @@ class TestMaterialContext:
     def test_style_summary(self):
         ctx = MaterialContext(
             entries=[
-                MaterialEntry(
-                    source_file="a.json", content="ambient chill", category="style"
-                ),
-                MaterialEntry(
-                    source_file="b.json", content="synthwave retro", category="style"
-                ),
+                MaterialEntry(source_file="a.json", content="ambient chill", category="style"),
+                MaterialEntry(source_file="b.json", content="synthwave retro", category="style"),
             ]
         )
         assert "ambient" in ctx.style_summary
@@ -97,12 +85,8 @@ class TestMaterialContext:
     def test_source_files(self):
         ctx = MaterialContext(
             entries=[
-                MaterialEntry(
-                    source_file="a.json", content="x", category="style"
-                ),
-                MaterialEntry(
-                    source_file="b.json", content="y", category="lyrics"
-                ),
+                MaterialEntry(source_file="a.json", content="x", category="style"),
+                MaterialEntry(source_file="b.json", content="y", category="lyrics"),
             ]
         )
         assert ctx.source_files == ["a.json", "b.json"]
@@ -110,9 +94,7 @@ class TestMaterialContext:
     def test_provenance_dict(self):
         ctx = MaterialContext(
             entries=[
-                MaterialEntry(
-                    source_file="a.json", content="ambient", category="style"
-                ),
+                MaterialEntry(source_file="a.json", content="ambient", category="style"),
             ]
         )
         prov = ctx.to_provenance_dict()

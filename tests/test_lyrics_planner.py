@@ -84,9 +84,7 @@ Line three"""
 class TestAutoSegmentation:
     @pytest.mark.asyncio
     async def test_auto_segment_short_text(self, planner):
-        result = await planner.execute(
-            LyricsInput(raw_text="Short lyrics here\nJust two lines")
-        )
+        result = await planner.execute(LyricsInput(raw_text="Short lyrics here\nJust two lines"))
         assert len(result.segments) >= 1
         assert result.formatted_lyrics != ""
 

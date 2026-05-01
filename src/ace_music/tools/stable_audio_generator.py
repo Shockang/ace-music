@@ -107,8 +107,7 @@ class StableAudioGenerator(MusicTool[StableAudioInput, AudioOutput]):
         out_dir = Path(output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         filename = (
-            f"stable_audio_{int(time.time())}_{uuid.uuid4().hex[:8]}."
-            f"{self._config.audio_format}"
+            f"stable_audio_{int(time.time())}_{uuid.uuid4().hex[:8]}.{self._config.audio_format}"
         )
         filepath = out_dir / filename
 

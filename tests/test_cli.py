@@ -102,9 +102,7 @@ def test_child_context_name_uses_spawn_on_darwin():
 def test_generate_parser_exposes_no_tts_flag_name():
     parser = cli.build_parser()
     subparsers = next(
-        action
-        for action in parser._actions
-        if isinstance(action, argparse._SubParsersAction)
+        action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
     )
     generate_parser = subparsers.choices["generate"]
     option_strings = [
@@ -120,9 +118,7 @@ def test_generate_parser_exposes_no_tts_flag_name():
 def test_generate_parser_describes_stable_audio_mode_limit():
     parser = cli.build_parser()
     subparsers = next(
-        action
-        for action in parser._actions
-        if isinstance(action, argparse._SubParsersAction)
+        action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
     )
     generate_parser = subparsers.choices["generate"]
     mode_action = next(action for action in generate_parser._actions if action.dest == "mode")

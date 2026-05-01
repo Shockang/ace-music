@@ -1,4 +1,5 @@
 """Tests for Stable Audio generation tool."""
+
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -92,9 +93,7 @@ class TestStableAudioGenerator:
             pytest.raises(ValueError, match="Stability API key required"),
         ):
             gen = StableAudioGenerator(config=StableAudioConfig(api_key=""))
-            await gen.execute(
-                StableAudioInput(description="test", output_dir=str(tmp_path))
-            )
+            await gen.execute(StableAudioInput(description="test", output_dir=str(tmp_path)))
 
     @pytest.mark.asyncio
     async def test_download_audio_rejects_non_audio_body(self, tmp_path):
@@ -160,9 +159,7 @@ class TestStableAudioGenerator:
 
     @pytest.mark.asyncio
     async def test_execute_keeps_polling_past_five_attempts_until_complete(self, tmp_path):
-        gen = StableAudioGenerator(
-            StableAudioConfig(api_key="test-key", poll_interval_seconds=0.0)
-        )
+        gen = StableAudioGenerator(StableAudioConfig(api_key="test-key", poll_interval_seconds=0.0))
 
         poll_responses = [{"status": "processing"}] * 6 + [
             {"status": "completed", "audio_url": "https://cdn.example.com/audio.mp3"}
@@ -199,9 +196,7 @@ class TestStableAudioGenerator:
         gen = StableAudioGenerator(StableAudioConfig(api_key="test-key"))
 
         with pytest.raises(GenerationFailedError, match="quota exceeded"):
-            gen._extract_audio_url(
-                {"status": "failed", "error": {"message": "quota exceeded"}}
-            )
+            gen._extract_audio_url({"status": "failed", "error": {"message": "quota exceeded"}})
 
     def test_extract_audio_url_rejects_nonterminal_payload(self):
         gen = StableAudioGenerator(StableAudioConfig(api_key="test-key"))

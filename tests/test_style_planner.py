@@ -32,9 +32,7 @@ class TestTagExtraction:
 
     @pytest.mark.asyncio
     async def test_mood_tags(self, planner):
-        result = await planner.execute(
-            StyleInput(description="upbeat pop song", mood="happy")
-        )
+        result = await planner.execute(StyleInput(description="upbeat pop song", mood="happy"))
         tags = result.prompt.split(", ")
         assert any("upbeat" in t for t in tags)
 
@@ -138,9 +136,7 @@ class TestStylePlannerWithPreset:
     @pytest.mark.asyncio
     async def test_no_preset_uses_existing_behavior(self, planner):
         """Without a preset, existing heuristic behavior should work."""
-        result = await planner.execute(
-            StyleInput(description="a dreamy synthwave track")
-        )
+        result = await planner.execute(StyleInput(description="a dreamy synthwave track"))
         assert "synthwave" in result.prompt
         assert result.guidance_scale == 15.0
 

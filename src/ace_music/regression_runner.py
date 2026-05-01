@@ -59,11 +59,7 @@ class RegressionRunner:
 
         actual_seed = seed if seed is not None else random.randint(0, 2**32 - 1)
         start_time = time.time()
-        provenance = (
-            material.to_provenance_dict()
-            if material and not material.is_empty
-            else None
-        )
+        provenance = material.to_provenance_dict() if material and not material.is_empty else None
 
         try:
             result = await self._agent.run(
@@ -139,9 +135,7 @@ class RegressionRunner:
 
         return results
 
-    def save_results(
-        self, results: list[RegressionResult], output_path: str
-    ) -> None:
+    def save_results(self, results: list[RegressionResult], output_path: str) -> None:
         """Save regression results to a JSON file."""
         successful = [r for r in results if r.success]
         report = {
@@ -155,7 +149,5 @@ class RegressionRunner:
         }
 
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        Path(output_path).write_text(
-            json.dumps(report, indent=2, ensure_ascii=False)
-        )
+        Path(output_path).write_text(json.dumps(report, indent=2, ensure_ascii=False))
         logger.info("Regression results saved to %s", output_path)

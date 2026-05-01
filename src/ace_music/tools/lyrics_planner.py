@@ -82,9 +82,7 @@ def _estimate_durations(segments: list[LyricSegment]) -> list[LyricSegment]:
     for seg in segments:
         duration = len(seg.lines) * _SECONDS_PER_LINE.get(seg.segment_type, 3.5)
         result.append(
-            seg.model_copy(
-                update={"time_start": current_time, "time_end": current_time + duration}
-            )
+            seg.model_copy(update={"time_start": current_time, "time_end": current_time + duration})
         )
         current_time += duration
     return result
@@ -147,9 +145,7 @@ class LyricsPlanner(MusicTool[LyricsInput, LyricsOutput]):
 
         segments = _estimate_durations(segments)
         formatted = _format_for_ace_step(segments)
-        total_duration = (
-            segments[-1].time_end if segments and segments[-1].time_end else None
-        )
+        total_duration = segments[-1].time_end if segments and segments[-1].time_end else None
 
         return LyricsOutput(
             segments=segments,
