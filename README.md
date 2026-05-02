@@ -169,7 +169,7 @@ Each stage is a separate tool module with typed input and output schemas. The ag
 | Mock | CI, smoke tests, first run, no GPU | None |
 | ACE-Step (local) | High-fidelity local generation | CUDA GPU, model weights, `pip install -e ".[model]"` |
 | MiniMax (cloud) | Cloud generation without local GPU | `MINIMAX_API_KEY` environment variable |
-| StableAudio (cloud) | Cloud instrumental generation | `STABLE_AUDIO_API_KEY` environment variable |
+| StableAudio (cloud) | Cloud instrumental generation | `STABILITY_API_KEY` environment variable |
 
 Mock mode generates a deterministic sine-wave WAV. It is not a model output. It is a contract-shaped placeholder that exercises the entire pipeline except the model call.
 
